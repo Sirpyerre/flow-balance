@@ -1,0 +1,27 @@
+{
+  "name": "flow-balance/app",
+  "type": "project",
+  "require": {
+    "php": "~8.4.0",
+    "ext-mbstring": "*",
+    "ext-pdo_pgsql": "*",
+    "mezzio/mezzio": "^3",
+    "mezzio/mezzio-fastroute": "^3",
+    "mezzio/mezzio-session": "^1",
+    "mezzio/mezzio-csrf": "^1",
+    "laminas/laminas-diactoros": "^3",
+    "laminas/laminas-servicemanager": "^4",
+    "robmorgan/phinx": "^0.16",
+    "vlucas/phpdotenv": "^5"
+  },
+  "require-dev": {"phpunit/phpunit": "^12"},
+  "autoload": {"psr-4": {"FlowBalance\\": "src/"}},
+  "scripts": {
+    "db:create-migration": "@php vendor/bin/phinx create",
+    "db:migrate": "@php vendor/bin/phinx migrate",
+    "db:status": "@php vendor/bin/phinx status",
+    "db:rollback": "@php vendor/bin/phinx rollback",
+    "db:seed": "@php db/seeders/DemoUserSeeder.php",
+    "test": "@php vendor/bin/phpunit"
+  }
+}

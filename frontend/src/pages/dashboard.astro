@@ -1,0 +1,197 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+---
+<AppLayout title="Tablero">
+  <div class="dashboard-heading">
+    <h1>Tablero</h1>
+    <a class="button primary" id="first-project" href="/projects/new" hidden>Crear mi primer proyecto</a>
+  </div>
+  <button id="logout" type="button" hidden>Cerrar sesión</button>
+  <p id="logout-error" role="alert" hidden></p>
+  <p id="status" role="status">Cargando tu tablero…</p>
+  <div id="account" hidden>
+    <section class="panel summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">Importe abonado este mes</h2>
+      <p id="total" class="amount"></p>
+    </section>
+
+    <section class="panel report" aria-labelledby="report-title">
+      <div class="report-heading">
+        <h2 id="report-title">Reporte mensual</h2>
+        <div class="month-field">
+          <label for="month">Mes del reporte</label>
+          <input id="month" type="month" lang="es-MX" />
+        </div>
+      </div>
+      <p id="report-total" class="amount" role="status"></p>
+      <h3>Cobros del reporte</h3>
+      <ul id="report-payments" class="records"></ul>
+      <p id="report-empty" class="empty" hidden>No hay cobros en este mes.</p>
+    </section>
+
+    <div class="collections">
+      <section class="panel" aria-labelledby="clients-title">
+        <h2 id="clients-title">Clientes</h2>
+        <ul id="clients" class="records"></ul>
+        <p class="empty">Aún no tienes clientes.</p>
+      </section>
+      <section class="panel" aria-labelledby="projects-title">
+        <h2 id="projects-title">Proyectos</h2>
+        <ul id="projects" class="records"></ul>
+        <p class="empty">Aún no tienes proyectos.</p>
+      </section>
+      <section class="panel" aria-labelledby="payments-title">
+        <h2 id="payments-title">Cobros guardados</h2>
+        <ul id="payments" class="records"></ul>
+        <p class="empty">Aún no tienes cobros.</p>
+      </section>
+    </div>
+  </div>
+</AppLayout>
+
+<style>
+  [hidden] { display: none !important; }
+  .dashboard-heading, .report-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  h1, h2, h3, .amount, .empty { margin: 0; }
+  h1 { font-size: clamp(28px, 5vw, 36px); }
+  h2 { font-size: 19px; }
+  h3 { font-size: 15px; margin-top: 22px; }
+  #status { color: var(--muted); }
+  #status:empty { display: none; }
+  #account { display: grid; gap: 18px; margin-top: 26px; }
+  .panel {
+    min-width: 0;
+    padding: clamp(16px, 4vw, 26px);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .summary { background: linear-gradient(110deg, #211837, var(--surface) 72%); }
+  .amount { margin-top: 12px; font-size: clamp(20px, 4vw, 30px); font-weight: 700; overflow-wrap: anywhere; }
+  .month-field { display: grid; gap: 10px; width: min(100%, 230px); }
+  .collections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .records { margin: 12px 0 0; padding-inline-start: 20px; overflow-wrap: anywhere; }
+  .records:empty, .records:not(:empty) + .empty { display: none; }
+  .empty { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  @media (max-width: 640px) {
+    .collections { grid-template-columns: 1fr; }
+    .month-field { width: 100%; }
+  }
+</style>
+<script>
+  import { watchPrivateSession } from '../lib/private-session';
+  const logout = document.querySelector<HTMLButtonElement>('#logout')!;
+  const logoutError = document.querySelector<HTMLElement>('#logout-error')!;
+  const session = watchPrivateSession(clear, load);
+  const status = document.querySelector<HTMLParagraphElement>('#status')!;
+  const account = document.querySelector<HTMLElement>('#account')!;
+  const total = document.querySelector<HTMLParagraphElement>('#total')!;
+  const firstProject = document.querySelector<HTMLAnchorElement>('#first-project')!;
+  const month = document.querySelector<HTMLInputElement>('#month')!;
+  const reportTotal = document.querySelector<HTMLElement>('#report-total')!;
+  const reportEmpty = document.querySelector<HTMLElement>('#report-empty')!;
+  const reportPayments = document.querySelector<HTMLElement>('#report-payments')!;
+  const lists = ['clients', 'projects', 'payments'].map((id) => document.getElementById(id)!);
+  let reportRequest: AbortController | undefined;
+  function renderList(list: HTMLElement, items: string[]) {
+    list.replaceChildren(...items.map((text) => {
+      const item = document.createElement('li');
+      item.textContent = text;
+      return item;
+    }));
+  }
+  function paymentLabel(payment: { paidOn: string; currency: string; clientPaidAmount: string }) {
+    return `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`;
+  }
+  async function report(passive = false) {
+    reportRequest?.abort();
+    reportPayments.replaceChildren();
+    reportEmpty.hidden = true;
+    reportTotal.textContent = '';
+    if (!month.value) return;
+    const current = new AbortController();
+    reportRequest = current;
+    try {
+      const query = new URLSearchParams({ month: month.value, currency: 'MXN' });
+      const response = await fetch(`/api/reports/monthly?${query}`, { cache: 'no-store', signal: current.signal, headers: passive ? { 'X-Session-Activity': 'passive' } : {} });
+      if (response.status === 401) return location.replace('/login');
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (current.signal.aborted) return;
+      session.updateDeadline(response);
+      reportTotal.textContent = `${data.currency} ${data.clientPaidTotal}`;
+      renderList(reportPayments, data.payments.map(paymentLabel));
+      reportEmpty.hidden = data.payments.length !== 0;
+    } catch {
+      if (!current.signal.aborted) reportTotal.textContent = 'No se pudo cargar el reporte.';
+    }
+  }
+  month.addEventListener('change', () => void report());
+  let request: AbortController | undefined;
+  async function load() {
+    request?.abort();
+    const current = new AbortController();
+    request = current;
+    try {
+      const response = await fetch('/api/dashboard', { cache: 'no-store', signal: current.signal, headers: { 'X-Session-Activity': 'passive' } });
+      if (response.status === 401) {
+        location.replace('/login');
+        return;
+      }
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (current.signal.aborted) return;
+      total.textContent = `${data.currency} ${data.clientPaidTotal}`;
+      firstProject.hidden = data.projects.length !== 0;
+      month.value = data.month;
+      renderList(lists[0], data.clients.map((client: { name: string }) => client.name));
+      renderList(lists[1], data.projects.map((project: { name: string }) => project.name));
+      renderList(lists[2], data.payments.map(paymentLabel));
+      status.textContent = '';
+      void report(true);
+      session.updateDeadline(response);
+      account.hidden = false;
+      logout.hidden = false;
+    } catch {
+      if (!current.signal.aborted) status.textContent = 'No se pudo cargar el tablero.';
+    }
+  }
+  function clear() {
+    request?.abort();
+    account.hidden = true;
+    logout.hidden = true;
+    firstProject.hidden = true;
+    total.textContent = '';
+    reportRequest?.abort();
+    reportTotal.textContent = '';
+    reportPayments.replaceChildren();
+    lists.forEach((list) => list.replaceChildren());
+  }
+  logout.addEventListener('click', async () => {
+    logout.disabled = true;
+    logoutError.hidden = true;
+    try {
+      const challenge = await fetch('/api/auth/csrf', { cache: 'no-store' });
+      if (!challenge.ok) throw new Error();
+      const { csrfToken } = await challenge.json();
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: '{}',
+      });
+      if (response.status !== 204 && response.status !== 401) throw new Error();
+      session.logoutConfirmed();
+    } catch {
+      logoutError.textContent = 'No se pudo confirmar el cierre de sesión. Intenta de nuevo.';
+      logoutError.hidden = false;
+    } finally {
+      logout.disabled = false;
+    }
+  });
+</script>

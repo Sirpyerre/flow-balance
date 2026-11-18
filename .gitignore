@@ -1,0 +1,66 @@
+# Configuración y metadatos de agentes
+.agents/
+.claude/
+.cluade/
+.codex/
+.continue/
+.cursor/
+.specify/
+.windsurf/
+
+# PHP y Composer
+vendor/
+.phpunit.cache/
+.phpunit.result.cache
+.php-cs-fixer.cache
+
+# Laminas y Mezzio
+data/cache/
+data/logs/
+config/autoload/*.local.php
+
+# JavaScript, React y gestores de paquetes
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Astro y compilaciones
+.astro/
+dist/
+coverage/
+
+# Docker
+Dockerfile
+Dockerfile.*
+*.Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.yaml
+docker-compose.*.yml
+docker-compose.*.yaml
+compose.yml
+compose.yaml
+compose.*.yml
+compose.*.yaml
+
+# Configuración local y registros
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.log
+
+# Archivos del proyecto y resultados locales
+!compose.yaml
+!.dockerignore
+frontend/playwright-report/
+frontend/test-results/
+!db/bootstrap/Dockerfile

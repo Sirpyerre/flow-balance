@@ -1,0 +1,19 @@
+---
+import '@fontsource-variable/inter';
+import '../styles/theme.css';
+const { title, description, publicPage = false } = Astro.props;
+---
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {description && <meta name="description" content={description} />}
+    <title>{title ? `${title} · Flow Balance` : 'Flow Balance'}</title>
+  </head>
+  <body class:list={{ 'public-page': publicPage }}>
+    <slot name="header" />
+    <main class:list={{ 'app-content': !publicPage }}><slot /></main>
+    <slot name="footer" />
+  </body>
+</html>

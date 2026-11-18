@@ -1,0 +1,16 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import RegisterForm from '../components/RegisterForm';
+---
+<AppLayout title="Crear cuenta" publicPage>
+  <SiteHeader slot="header" mode="register" />
+  <div class="auth-wrap">
+    <section class="auth-card" aria-labelledby="register-title">
+      <h1 id="register-title">Crear cuenta</h1>
+      <p class="auth-description">Organiza tus clientes, proyectos y cobros desde un solo lugar.</p>
+      <RegisterForm client:load />
+      <p class="auth-footer">¿Ya tienes cuenta? <a href="/login">Iniciar sesión</a></p>
+    </section>
+  </div>
+</AppLayout>

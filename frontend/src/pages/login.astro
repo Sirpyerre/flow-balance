@@ -1,0 +1,16 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import LoginForm from '../components/LoginForm';
+---
+<AppLayout title="Iniciar sesión" publicPage>
+  <SiteHeader slot="header" mode="login" />
+  <div class="auth-wrap">
+    <section class="auth-card" aria-labelledby="login-title">
+      <h1 id="login-title">Iniciar sesión</h1>
+      <p class="auth-description">Consulta tus clientes, proyectos y cobros.</p>
+      <LoginForm client:load />
+      <p class="auth-footer">¿Todavía no tienes cuenta? <a href="/register">Crear cuenta</a></p>
+    </section>
+  </div>
+</AppLayout>

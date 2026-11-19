@@ -11,7 +11,7 @@ final readonly class PaymentExcess
 
     public function project(string $userId, string $projectId, bool $lock = false): ?array
     {
-        $query = $this->database->prepare('SELECT agreed_amount::text FROM projects WHERE user_id = ? AND id = ?'
+        $query = $this->database->prepare('SELECT round(agreed_amount, 2)::text AS agreed_amount FROM projects WHERE user_id = ? AND id = ?'
             . ($lock ? ' FOR UPDATE' : ''));
         $query->execute([$userId, $projectId]);
         return $query->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -31,6 +31,7 @@ final readonly class PaymentExcess
         return [
             'projectedClientPaidTotal' => $row['total'],
             'excessAmount' => $row['excess'],
+            'projectedOutstandingBalance' => ProjectBalance::calculate($agreedAmount, $row['total'])['outstandingBalance'],
             'requiresExcessReason' => $row['excess'] !== null && trim($row['excess'], '0.') !== '',
         ];
     }

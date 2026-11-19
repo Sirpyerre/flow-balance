@@ -37,7 +37,11 @@ final class PaymentCorrectionHandler implements RequestHandlerInterface
             } elseif ($version !== '') {
                 $version = 'invalid';
             }
-            (new EditPayment($repository))->edit($userId, $id, $body, $version, $request->getHeaderLine('Idempotency-Key'));
+            $edit = new EditPayment($repository);
+            if ($request->getMethod() === 'POST') {
+                return new JsonResponse($edit->preview($userId, $id, $body, $version));
+            }
+            $edit->edit($userId, $id, $body, $version, $request->getHeaderLine('Idempotency-Key'));
             return new JsonResponse((new PostgresOwnedResourceRepository($database))->detail('payments', $userId, $id));
         } catch (IncomeNotFound) {
             return self::error(404, 'not_found', 'Recurso no disponible');

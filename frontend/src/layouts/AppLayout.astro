@@ -1,22 +1,33 @@
 ---
 import '@fontsource-variable/inter';
 import '../styles/theme.css';
+import PrivateNavigation from '../components/PrivateNavigation.astro';
+const privatePage = /^\/(dashboard|projects|clients|payments)(\/|$)/.test(Astro.url.pathname);
 const { title, description, publicPage = false, wide = false } = Astro.props;
 ---
 <!doctype html>
-<html lang="es-MX">
+<html lang="es-MX" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     {description && <meta name="description" content={description} />}
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/app-192.png" />
     <meta name="theme-color" content="#0b0b0f" />
+    <script is:inline>
+      try {
+        if (localStorage.getItem('flow-balance-theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.querySelector('meta[name="theme-color"]').content = '#f1f2fa';
+        }
+      } catch {}
+    </script>
     <title>{title ? `${title} · Flow Balance` : 'Flow Balance'}</title>
   </head>
   <body class:list={{ 'public-page': publicPage }}>
     <slot name="header" />
-    <main class:list={{ 'app-content': !publicPage, 'app-content-wide': wide }}><slot /></main>
+    {privatePage && <PrivateNavigation path={Astro.url.pathname} />}
+    <main class:list={{ 'private-content': privatePage, 'app-content': !publicPage, 'app-content-wide': wide }}><slot /></main>
     <slot name="footer" />
   </body>
 </html>

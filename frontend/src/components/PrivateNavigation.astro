@@ -1,0 +1,19 @@
+---
+import ThemeSelector from './ThemeSelector.astro';
+const { path } = Astro.props;
+const links = [
+  { href: '/dashboard', label: 'Tablero', stroke: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
+  { href: '/payments', label: 'Cobros', stroke: 'M3 5h18v14H3zm0 5h18' },
+  { href: '/projects', label: 'Proyectos', stroke: 'M3 6h7l2 2h9v12H3z' },
+  { href: '/clients', label: 'Clientes', stroke: 'M15 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM5 20a7 7 0 0 1 14 0' },
+];
+---
+<nav class="private-navigation" aria-label="Navegación privada">
+  <a class="private-brand" href="/dashboard" aria-label="Flow Balance">FB</a>
+  <div class="private-destinations">
+    {links.map(({ href, label, stroke }) => <a href={href} aria-current={path.startsWith(href) ? 'page' : undefined}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={stroke}/></svg><span>{label}</span>
+    </a>)}
+  </div>
+  <div class="private-theme"><ThemeSelector /></div>
+</nav>

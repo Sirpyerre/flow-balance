@@ -69,7 +69,7 @@ export type DeliveryStatus = 'in_progress' | 'delivered';
 
 export type Project = CollectionBalance & ProjectPaymentData & {
   id: string; name: string; client: Client; agreedAmount: string | null; acquisitionSource: string | null;
-  deliveryStatus: DeliveryStatus | null; clientPaidTotal: string; payments: PaymentSummary[];
+  canChangeClient?: boolean; deliveryStatus: DeliveryStatus | null; clientPaidTotal: string; payments: PaymentSummary[];
 };
 export type Charge = { id: string; chargeType: string; paidOn: string; amount: string };
 export type Payment = PaymentSummary & {
@@ -90,6 +90,11 @@ export function todayInMexico() {
   }).formatToParts(new Date());
   return ['year', 'month', 'day'].map(type => date.find(part => part.type === type)?.value).join('-');
 }
+
+export type PaymentHistory = {
+  payments: DashboardPayment[]; nextCursor: string | null; recentMonths: string[];
+  summary: { paymentCount: number; latestPaidOn: string | null; totalsByCurrency: Record<string, string> };
+};
 
 export type MonthlyReport = {
   clientPaidTotal: string; platformFeeTotal: string; taxTotal: string; netReceivedTotal: string;

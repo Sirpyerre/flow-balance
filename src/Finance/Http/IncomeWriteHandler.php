@@ -7,6 +7,7 @@ use DomainException;
 use FlowBalance\Finance\Application\PaymentDeleted;
 use FlowBalance\Finance\Application\CreateClient;
 use FlowBalance\Finance\Application\CreateProject;
+use FlowBalance\Finance\Application\ProjectAgreement;
 use FlowBalance\Finance\Application\IncomeNotFound;
 use FlowBalance\Finance\Application\IncomeValidation;
 use FlowBalance\Finance\Application\OwnedResourceChanges;
@@ -38,6 +39,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
         try {
             return match ($this->operation) {
                 'client' => $this->client($database, $userId, $body),
+                'agreement-preview' => $this->agreementPreview($database, $userId, $request->getAttribute('id'), $body),
                 'project' => $this->project($database, $userId, $body),
                 'preview', 'payment' => $this->payment($database, $userId, $body, $key),
                 'charge' => $this->charge($database, $userId, $request->getAttribute('id'), $body, $key),
@@ -62,6 +64,15 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
         return new JsonResponse(['id' => (new CreateClient($database))->create($userId, $name), 'name' => $name], 201);
     }
 
+    private function agreementPreview(PDO $database, string $userId, mixed $id, array $body): JsonResponse
+    {
+        $project = (new PostgresOwnedResourceRepository($database))->detail('projects', $userId, $this->identifier($id));
+        if (!$project) {
+            throw new IncomeNotFound();
+        }
+        return new JsonResponse(ProjectAgreement::preview($project, $body['agreedAmount'] ?? null));
+    }
+
     private function project(PDO $database, string $userId, array $body): JsonResponse
     {
         $name = PaymentInput::text($body['name'] ?? null, 'name', 100);
@@ -72,10 +83,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
         }
         PaymentInput::currency($body['agreedCurrency'] ?? null, 'agreedCurrency');
         $amount = PaymentAmounts::normalize($body['agreedAmount'] ?? null, 'agreedAmount');
-        $count = $body['agreedPaymentCount'] ?? null;
-        if (!is_int($count) || $count < 1) {
-            throw new IncomeValidation('agreedPaymentCount', 'Indica una cantidad entera de pagos mayor que cero.');
-        }
+        $count = ProjectAgreement::paymentCount($body['agreedPaymentCount'] ?? null);
         $origin = PaymentInput::text($body['acquisitionSource'] ?? null, 'acquisitionSource', 100);
         $id = (new CreateProject($database))->create($userId, $client, $name, [$amount, 'MXN', $count, $origin]);
         return new JsonResponse($repository->detail('projects', $userId, $id), 201);

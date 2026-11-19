@@ -1,70 +1,135 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
+import MonthPicker from '../../components/MonthPicker.astro';
 ---
-<AppLayout title="Cobros guardados">
-  <a class="income-back" href="/dashboard">← Volver al tablero</a>
-  <section class="income-panel" aria-labelledby="payments-heading">
-    <h1 id="payments-heading">Cobros guardados</h1>
-    <p id="status" role="status">Verificando tu sesión…</p>
-    <ul class="income-records" id="history" role="list" hidden></ul>
-    <button id="next-payments" type="button" hidden>Cargar más cobros</button>
+<AppLayout title="Cobros guardados" wide>
+  <header class="workspace-heading">
+    <div><a class="income-back" href="/dashboard">← Tablero</a><h1>Cobros guardados</h1><p id="history-count"></p></div>
+    <a class="button primary" href="/payments/new">Registrar cobro</a>
+  </header>
+  <section class="income-panel history-summary" id="history-summary" hidden>
+    <dl><div><dt>Total listado</dt><dd id="history-total"></dd></div><div><dt>Último cobro</dt><dd id="history-latest"></dd></div></dl>
+    <div id="history-filters" class="history-filters" aria-label="Filtrar cobros">
+      <div id="quick-months" class="history-filters"></div>
+      <button type="button" id="history-month" aria-haspopup="dialog">Elegir mes</button>
+    </div>
   </section>
+  <MonthPicker />
+  <p id="status" role="status">Verificando tu sesión…</p>
+  <div class="income-panel history-panel" id="history-panel" hidden>
+    <div class="history-header" aria-hidden="true"><span>Fecha</span><span>Mes</span><span>Importe</span><span>Acción</span></div>
+    <ul id="history" role="list"></ul>
+  </div>
+  <button id="next-payments" type="button" hidden>Cargar más cobros</button>
 </AppLayout>
 
 <script>
-  import { incomeRequest, resourceQuery, type DashboardPayment } from '../../lib/income-api';
+  import { incomeRequest, resourceQuery, todayInMexico, type PaymentHistory } from '../../lib/income-api';
   import { watchPrivateSession } from '../../lib/private-session';
-
-  const list = document.querySelector<HTMLUListElement>('#history')!;
-  const status = document.querySelector<HTMLElement>('#status')!;
+  import { mountMonthPicker, periodLabel } from '../../lib/month-picker';
+  const list = document.getElementById('history')!;
+  const heading = document.getElementById('history-count')!;
+  const summary = document.getElementById('history-summary')!;
+  const total = document.getElementById('history-total')!;
+  const latest = document.getElementById('history-latest')!;
+  const panel = document.getElementById('history-panel')!;
+  const filters = document.getElementById('quick-months')!;
+  const status = document.getElementById('status')!;
   const next = document.querySelector<HTMLButtonElement>('#next-payments')!;
+  const month = document.querySelector<HTMLButtonElement>('#history-month')!;
+  const date = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const dateLabel = (value: string) => date.format(new Date(value + 'T00:00:00Z'));
+  const money = (currency: string, amount: string) => {
+    const [whole, fraction = ''] = amount.split('.');
+    return `${currency} ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`;
+  };
   let cursor: string | null = null;
-  let activeRequest: AbortController | undefined;
+  let period = '';
+  let request: AbortController | undefined;
+  const currentPeriod = todayInMexico().slice(0, 7);
 
-  function clear() {
-    activeRequest?.abort();
-    activeRequest = undefined;
+  function clearRows() {
+    request?.abort();
+    request = undefined;
     cursor = null;
     list.replaceChildren();
-    list.hidden = next.hidden = true;
+    heading.textContent = total.textContent = latest.textContent = '';
+    panel.hidden = next.hidden = true;
+  }
+  function clear() {
+    clearRows();
+    picker.close();
+    filters.replaceChildren();
+    summary.hidden = true;
     status.textContent = '';
   }
-
-  const session = watchPrivateSession(clear, () => void load());
+  function selectPeriod(value: string) {
+    if (period === value) return;
+    period = value;
+    clearRows();
+    void load();
+  }
+  const picker = mountMonthPicker(month, () => period, () => currentPeriod, selectPeriod);
+  const session = watchPrivateSession(clear, () => void load(), () => { period = ''; clear(); });
   addEventListener('income-session-response', event => session.updateDeadline((event as CustomEvent<Response>).detail));
 
+  function render(result: PaymentHistory) {
+    const details = result.summary;
+    heading.textContent = details.paymentCount === 1 ? '1 cobro registrado' : `${details.paymentCount} cobros registrados`;
+    total.textContent = Object.entries(details.totalsByCurrency).map(([currency, amount]) => money(currency, amount)).join(' · ') || 'MXN 0.00';
+    latest.textContent = details.latestPaidOn ? dateLabel(details.latestPaidOn) : '—';
+    filters.replaceChildren(...['', ...result.recentMonths].map(value => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = value ? periodLabel(value) : 'Todos';
+      button.setAttribute('aria-pressed', String(period === value));
+      button.addEventListener('click', () => selectPeriod(value));
+      return button;
+    }));
+    month.textContent = period && !result.recentMonths.includes(period) ? periodLabel(period) : 'Elegir mes';
+    summary.hidden = false;
+    for (const payment of result.payments) {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      const paymentDate = document.createElement('strong');
+      const paymentMonth = document.createElement('span');
+      const amount = document.createElement('strong');
+      paymentDate.textContent = dateLabel(payment.paidOn);
+      paymentMonth.textContent = periodLabel(payment.paidOn.slice(0, 7)).split(' ')[0];
+      amount.textContent = money(payment.currency, payment.clientPaidAmount);
+      link.href = '/payments/view?' + resourceQuery('id', payment.id);
+      link.textContent = 'Ver';
+      link.setAttribute('aria-label', 'Ver cobro del ' + paymentDate.textContent);
+      item.append(paymentDate, paymentMonth, amount, link);
+      list.append(item);
+    }
+  }
+
   async function load() {
-    if (activeRequest) return;
-    const request = new AbortController();
-    activeRequest = request;
+    if (request) return;
+    const active = new AbortController();
+    request = active;
     next.hidden = true;
     status.textContent = 'Cargando cobros…';
     try {
-      const query = cursor ? '?' + resourceQuery('cursor', cursor) : '';
-      const result = await incomeRequest<{ payments: DashboardPayment[]; nextCursor: string | null }>(`/api/payments${query}`, {
-        signal: request.signal, passive: true,
-      });
-      if (request.signal.aborted) return;
-      for (const payment of result.payments) {
-        const item = document.createElement('li');
-        const link = document.createElement('a');
-        link.href = '/payments/view?' + resourceQuery('id', payment.id);
-        link.textContent = `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`;
-        item.append(link);
-        list.append(item);
-      }
+      const query = new URLSearchParams();
+      if (period) query.set('month', period);
+      if (cursor) query.set('cursor', cursor);
+      const result = await incomeRequest<PaymentHistory>(`/api/payments${query.size ? '?' + query : ''}`, { signal: active.signal, passive: true });
+      if (active.signal.aborted) return;
+      render(result);
       cursor = result.nextCursor;
-      list.hidden = list.children.length === 0;
-      status.textContent = list.hidden ? 'Aún no tienes cobros.' : '';
+      panel.hidden = list.children.length === 0;
+      status.textContent = panel.hidden ? (period ? 'No hay cobros en este mes. Puedes elegir otro filtro.' : 'Aún no tienes cobros.') : '';
       next.textContent = 'Cargar más cobros';
       next.hidden = cursor === null;
     } catch {
-      if (request.signal.aborted) return;
+      if (active.signal.aborted) return;
       status.textContent = 'No se pudieron cargar los cobros.';
       next.textContent = 'Reintentar';
       next.hidden = false;
     } finally {
-      if (activeRequest === request) activeRequest = undefined;
+      if (request === active) request = undefined;
     }
   }
   next.addEventListener('click', () => void load());
@@ -72,5 +137,29 @@ import AppLayout from '../../layouts/AppLayout.astro';
 </script>
 
 <style>
-  #next-payments[hidden] { display: none; }
+  .history-summary, .history-panel { width: 100%; }
+  .history-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; }
+  .history-summary dl { display: flex; flex-wrap: wrap; gap: .75rem 2rem; margin: 0; }
+  .history-summary dt, .history-header { color: var(--muted); font-size: .8rem; font-weight: 600; }
+  .history-summary dd { margin: .25rem 0 0; font-weight: 750; overflow-wrap: anywhere; }
+  .history-filters { display: flex; min-width: 0; gap: .35rem; align-items: center; }
+  .history-filters :global(button) { white-space: nowrap; padding: .4rem .65rem; font-size: .75rem; }
+  .history-filters :global(button[aria-pressed="true"]) { background: var(--gradient); color: white; border-color: transparent; }
+  .history-panel { padding: 0; overflow: hidden; }
+  #history { list-style: none; margin: 0; padding: 0; }
+  .history-header, #history :global(li) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 4rem; gap: .625rem; padding: .85rem 1.15rem; }
+  #history :global(li) { border-top: 1px solid var(--border); overflow-wrap: anywhere; font-size: .875rem; }
+  #history :global(li span) { color: var(--muted); }
+  #history :global(li strong:nth-child(3)), .history-header span:nth-child(n+3) { text-align: end; }
+  #history :global(li a) { text-align: end; }
+  #status:empty { display: none; }
+  #next-payments { margin-top: 1rem; }
+  @media (max-width: 700px) {
+    .history-header { display: none; }
+    #history :global(li) { grid-template-columns: 1fr 1fr; }
+    #history :global(li strong:nth-child(3)) { grid-row: 1; grid-column: 2; }
+    #history :global(li span) { grid-row: 2; grid-column: 1; }
+    #history-filters { overflow-x: auto; width: 100%; }
+    #quick-months { flex: 0 0 auto; }
+  }
 </style>

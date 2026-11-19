@@ -31,8 +31,10 @@ export function useProjectPaymentSummary(projectId: string | undefined, initial?
   };
 }
 
-export default function ProjectPaymentSummary({ summary, mode }: {
+export default function ProjectPaymentSummary({ summary, mode, projectedBalance, projectedProvisional }: {
   summary: ReturnType<typeof useProjectPaymentSummary>;
+  projectedProvisional?: boolean;
+  projectedBalance?: string | null;
   mode: 'create' | 'edit' | 'saved';
 }) {
   const heading = useId();
@@ -48,6 +50,7 @@ export default function ProjectPaymentSummary({ summary, mode }: {
         <p>{data.isBalanceProvisional ? 'Saldo pendiente provisional' : 'Saldo pendiente'} <strong>{data.outstandingBalance === null ? 'Por determinar' : amountLabel(data.outstandingBalance)}</strong></p>
       </>}
       {Boolean(data.unconvertedPaymentCount) && <p>Hay cobros sin convertir a MXN.</p>}
+      {projectedBalance != null && <p>{(projectedProvisional ?? data.isBalanceProvisional) ? 'Saldo provisional tras guardar:' : 'Saldo tras guardar:'} <strong>{amountLabel(projectedBalance)}</strong></p>}
       {mode === 'edit' && <p>Esta edición no cambia el número de pagos.</p>}
     </div>}
   </section>;

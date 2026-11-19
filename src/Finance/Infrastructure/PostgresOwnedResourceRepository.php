@@ -54,6 +54,7 @@ final readonly class PostgresOwnedResourceRepository
                    round(p.agreed_amount, 2)::text AS "agreedAmount",
                    p.agreed_currency AS "agreedCurrency", p.agreed_payment_count AS "agreedPaymentCount",
                    p.acquisition_source AS "acquisitionSource", p.delivery_status AS "deliveryStatus", c.name AS client_name,
+                   NOT EXISTS (SELECT 1 FROM payments WHERE user_id = p.user_id AND project_id = p.id) AS "canChangeClient",
                    summary.payment_count AS "paymentCount", summary.unconverted_count AS "unconvertedPaymentCount", summary.total AS "clientPaidTotal", summary.payments
             FROM projects p
             JOIN clients c ON c.user_id = p.user_id AND c.id = p.client_id
@@ -103,6 +104,9 @@ final readonly class PostgresOwnedResourceRepository
                 'name' => 'name = ?',
                 'clientId' => 'client_id = ?',
                 'clientPaidAmount' => 'client_paid_amount = ?',
+                'agreedAmount' => "agreed_amount = ?, agreed_currency = 'MXN'",
+                'agreedPaymentCount' => 'agreed_payment_count = ?',
+                'acquisitionSource' => 'acquisition_source = ?',
                 'deliveryStatus' => 'delivery_status = ?',
             };
         }
@@ -113,6 +117,14 @@ final readonly class PostgresOwnedResourceRepository
         );
         $query->execute([...array_values($changes), $userId, $id]);
         return $query->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function recordAgreementRevision(string $userId, string $id, string $previous, string $amount, array $preview, string $reason): void
+    {
+        $revision = $this->database->prepare('INSERT INTO project_agreement_revisions
+            (user_id, project_id, previous_agreed_amount, agreed_amount, client_paid_total, excess_amount, reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?)');
+        $revision->execute([$userId, $id, $previous, $amount, $preview['clientPaidTotal'], $preview['excessAmount'], $reason]);
     }
 
     private function projection(string $type): string

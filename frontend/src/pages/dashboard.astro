@@ -1,20 +1,9 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-const monthNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
-const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' });
+import MonthPicker from '../components/MonthPicker.astro';
 ---
 <AppLayout title="Tablero" wide>
   <div class="dashboard-shell" id="dashboard">
-  <nav class="dashboard-nav" aria-label="Navegación del tablero">
-    <a href="#dashboard" class="dashboard-brand" aria-label="Flow Balance">FB</a>
-    <div class="dashboard-nav-links">
-      <a href="#dashboard" aria-label="Tablero" title="Tablero"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
-      <a href="/payments" aria-label="Historial de cobros" title="Historial de cobros"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></a>
-      <a href="#monthly-chart" aria-label="Cobros por mes" title="Cobros por mes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 17v-6m6 6V4m6 13v-8"/></svg></a>
-      <a href="#clients-title" aria-label="Clientes" title="Clientes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></a>
-      <a href="#projects-title" aria-label="Proyectos" title="Proyectos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></a>
-    </div>
-  </nav>
   <div class="dashboard-content">
   <div class="dashboard-toolbar">
     <label class="dashboard-search" hidden>
@@ -28,32 +17,13 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
     <div><h1>Tablero</h1><p id="dashboard-period"></p></div>
     <div class="dashboard-actions">
       <button class="button" id="month" type="button" aria-haspopup="dialog" aria-controls="month-dialog" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
         <span>Mes del reporte</span>
       </button>
-      <button class="button primary" id="capture" type="button" hidden>Registrar cobro</button>
+      <button class="button primary" id="capture" type="button" aria-haspopup="dialog" hidden>Registrar cobro</button>
     </div>
   </header>
-  <dialog id="month-dialog" aria-labelledby="month-dialog-title">
-    <h2 id="month-dialog-title">Mes del reporte</h2>
-    <div class="period-year">
-      <button id="previous-year" type="button" aria-label="Año anterior">‹</button>
-      <label>
-        <span class="dashboard-sr">Año</span>
-        <input id="report-year" type="number" inputmode="numeric" min="1000" step="1" required />
-      </label>
-      <button id="next-year" type="button" aria-label="Año siguiente">›</button>
-    </div>
-    <div class="period-months" role="group" aria-label="Meses">
-      {monthNumbers.map(number => <button type="button" data-month={number} aria-pressed="false">
-        {monthLabel.format(new Date(Date.UTC(2024, number - 1, 1))).replace('.', '')}
-      </button>)}
-    </div>
-    <div class="period-actions">
-      <button type="button" id="current-period">Este mes</button>
-      <form method="dialog"><button>Cancelar</button></form>
-    </div>
-  </dialog>
+  <MonthPicker />
   <dialog id="capture-dialog" aria-labelledby="capture-title">
     <h2 id="capture-title">Elige un proyecto</h2>
     <ul id="capture-projects" class="records"></ul>
@@ -114,7 +84,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
     <div class="collections">
       <section class="panel" aria-labelledby="clients-title">
         <div class="collection-heading">
-          <h2 id="clients-title">Clientes <span id="client-count"></span></h2>
+          <h2 id="clients-title"><a href="/clients">Clientes</a> <span id="client-count"></span></h2>
           <a href="/clients/new" aria-label="Nuevo cliente">+ Nuevo</a>
         </div>
         <ul id="clients" class="records collection-records" role="list"></ul>
@@ -122,7 +92,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
       </section>
       <section class="panel" aria-labelledby="projects-title">
         <div class="collection-heading">
-          <h2 id="projects-title">Proyectos <span id="project-count"></span></h2>
+          <h2 id="projects-title"><a href="/projects">Proyectos</a> <span id="project-count"></span></h2>
           <a href="/projects/new" aria-label="Nuevo proyecto">+ Nuevo</a>
         </div>
         <ul id="projects" class="records collection-records" role="list"></ul>
@@ -185,7 +155,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
     border: 1px solid var(--border);
     background: var(--surface);
   }
-  .summary { background: linear-gradient(110deg, #211837, var(--surface) 72%); }
+  .summary { background: linear-gradient(110deg, var(--highlight-surface), var(--surface) 72%); }
   .amount { margin-top: 12px; font-size: clamp(20px, 4vw, 30px); font-weight: 700; overflow-wrap: anywhere; }
   .balance-heading { align-items: end; }
   .balance-filter select {
@@ -261,7 +231,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   .dashboard-main .panel { min-height: 13rem; }
   .dashboard-metrics h2 { font-size: .875rem; color: var(--muted); }
   .summary h2 { color: var(--link); }
-  .summary { background: linear-gradient(110deg, #211837, #21151b); }
+  .summary { background: linear-gradient(110deg, var(--highlight-surface), var(--highlight-end)); }
   .amount { margin-top: .375rem; line-height: 1.15; font-size: clamp(1.4rem, 3vw, 1.75rem); }
   .summary .amount { font-size: clamp(1.7rem, 4vw, 2.25rem); }
   .panel h2 { font-size: 1rem; }
@@ -287,42 +257,26 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   .balance-list :global(progress::-webkit-progress-bar) { background: var(--input-border); border-radius: .375rem; }
   .balance-list :global(progress::-webkit-progress-value) { background: var(--gradient); border-radius: .375rem; }
   .balance-list :global(progress::-moz-progress-bar) { background: var(--gradient); border-radius: .375rem; }
-  #capture-dialog, #month-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); color: var(--text); }
-  #capture-dialog::backdrop, #month-dialog::backdrop { background: #0009; }
+  #capture-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); color: var(--text); }
+  #capture-dialog::backdrop { background: #0009; }
   #capture-dialog form { justify-content: end; }
   .net-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); gap: .75rem; margin: 1rem 0; padding-top: .875rem; border-top: 1px solid var(--border); }
   .net-metrics dt { color: var(--muted); font-size: .8125rem; }
   .net-metrics dd { margin: .25rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
   #net-details { margin-bottom: .75rem; }
   #net-details summary { cursor: pointer; }
-  :global(.app-content-wide:has(.dashboard-shell)) { max-width: 90rem; margin: 0 auto; padding: 0; }
-  .dashboard-shell { display: grid; grid-template-columns: 4.75rem minmax(0, 1fr); min-height: 100vh; }
+  :global(.app-content-wide:has(.dashboard-shell)) { max-width: 90rem; padding: 0; }
+  .dashboard-shell { min-width: 0; }
   .dashboard-content { min-width: 0; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
-  .dashboard-nav { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 1.25rem .625rem; background: var(--surface); border-inline-end: 1px solid var(--border); }
-  .dashboard-nav-links { display: grid; gap: .625rem; }
-  .dashboard-nav a { display: grid; place-items: center; width: 2.625rem; height: 2.625rem; border-radius: .75rem; text-decoration: none; }
-  .dashboard-nav a:hover, .dashboard-nav-links a:first-child, .dashboard-brand { background: var(--border); color: var(--link); }
   .dashboard-brand { font-weight: 800; }
-  .dashboard-nav svg, .dashboard-search svg, #month svg { width: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .dashboard-toolbar { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
   .dashboard-search { display: flex; align-items: center; gap: .55rem; width: min(100%, 22.5rem); border: 1px solid var(--input-border); border-radius: .625rem; background: var(--surface); padding-inline-start: .75rem; color: var(--muted); }
   .dashboard-search input { width: 100%; min-width: 0; min-height: 2.375rem; border: 0; border-radius: .625rem; background: transparent; padding: .4rem .625rem .4rem 0; color: var(--text); font-size: .875rem; }
   .dashboard-search svg { flex: 0 0 1rem; }
   #logout { margin-inline-start: auto; white-space: nowrap; }
   #month, #capture, #logout { min-height: 2.625rem; }
-  #month { background: var(--surface); }
-  #month svg { color: var(--link); flex-shrink: 0; }
-  #month-dialog { width: min(23rem, calc(100% - 2rem)); }
-  .period-year { display: grid; grid-template-columns: 2.625rem 1fr 2.625rem; gap: .5rem; margin: 1rem 0 .75rem; }
-  .period-year button { font-size: 1.2rem; padding: 0; }
-  .period-year input { width: 100%; height: 2.625rem; text-align: center; appearance: textfield; }
-  .period-year input::-webkit-inner-spin-button, .period-year input::-webkit-outer-spin-button { appearance: none; }
-  .period-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
-  .period-months button { padding-inline: .375rem; min-height: 2.625rem; text-transform: capitalize; }
-  .period-months button[aria-pressed="true"] { color: var(--link); border-color: var(--accent); background: var(--base); }
-  .period-months button:disabled, .period-year button:disabled { opacity: .45; }
-  .period-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin-top: 1rem; }
-  .period-actions form { margin: 0; }
+  #month { background: var(--surface); white-space: nowrap; }
+  #month svg { flex: none; color: var(--link); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .dashboard-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-main { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   .chart-panel { display: grid; gap: 1rem; align-content: start; }
@@ -337,13 +291,18 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   .chart-selected-key::before { opacity: 1 !important; }
   .collection-records :global(a span) { color: var(--text); font-weight: 600; }
   .collections .empty:not([hidden]) { display: block; }
+  .collection-heading h2 a { color: inherit; text-decoration: none; }
+  .collection-heading h2 a:hover { text-decoration: underline; }
   .dashboard-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   @media (max-width: 700px) {
     .dashboard-shell { grid-template-columns: minmax(0, 1fr); }
-    .dashboard-nav { flex-direction: row; justify-content: space-between; gap: .375rem; border-inline-end: 0; border-bottom: 1px solid var(--border); padding: .5rem .75rem; }
-    .dashboard-nav-links { display: flex; gap: .25rem; }
-    .dashboard-nav a { width: 2.5rem; height: 2.5rem; }
-    .dashboard-metrics, .dashboard-main, .collections { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-main, .collections { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+    .dashboard-metrics .summary { grid-column: 1 / -1; }
+    .dashboard-metrics .panel:not(.summary) { padding: .75rem; }
+    .dashboard-metrics .panel:not(.summary) .amount { font-size: clamp(.9rem, 4vw, 1.125rem); overflow-wrap: anywhere; }
+    .summary #capture { width: 100%; margin-top: .75rem; }
+    .collections section:last-child { order: -1; }
     .dashboard-heading { align-items: start; }
     .dashboard-actions { width: 100%; }
     .dashboard-main .panel { min-height: 0; }
@@ -365,12 +324,8 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   const firstProject = document.querySelector<HTMLAnchorElement>('#first-project')!;
   const month = document.querySelector<HTMLButtonElement>('#month')!;
   const monthCaption = month.querySelector('span')!;
-  const monthDialog = document.querySelector<HTMLDialogElement>('#month-dialog')!;
-  const year = document.querySelector<HTMLInputElement>('#report-year')!;
-  const previousYear = document.querySelector<HTMLButtonElement>('#previous-year')!;
-  const nextYear = document.querySelector<HTMLButtonElement>('#next-year')!;
-  const currentPeriod = document.querySelector<HTMLButtonElement>('#current-period')!;
-  const periodMonths = [...monthDialog.querySelectorAll<HTMLButtonElement>('[data-month]')];
+  import { mountMonthPicker } from '../lib/month-picker';
+  const picker = mountMonthPicker(month, () => selectedMonth, () => currentMonth, selectPeriod);
   const reportTotal = document.querySelector<HTMLElement>('#report-total')!;
   const reportEmpty = document.querySelector<HTMLElement>('#report-empty')!;
   const reportPayments = document.querySelector<HTMLElement>('#report-payments')!;
@@ -382,6 +337,11 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   const balanceRetry = document.querySelector<HTMLButtonElement>('#balance-retry')!;
   const balanceCreate = document.querySelector<HTMLAnchorElement>('#balance-create')!;
   const capture = document.querySelector<HTMLButtonElement>('#capture')!;
+  const dashboardActions = capture.parentElement!;
+  const mobile = matchMedia('(max-width: 700px)');
+  const positionCapture = () => (mobile.matches ? document.querySelector('.dashboard-metrics .summary')! : dashboardActions).append(capture);
+  mobile.addEventListener('change', positionCapture);
+  positionCapture();
   const captureDialog = document.querySelector<HTMLDialogElement>('#capture-dialog')!;
   const captureProjects = document.getElementById('capture-projects')!;
   const reportRetry = document.querySelector<HTMLButtonElement>('#report-retry')!;
@@ -412,7 +372,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
   let currentMonth = '';
   let selectedMonth = '';
   let projects: { id: string; name: string }[] = [];
-  const capturePath = (id: string) => `/payments/new?${resourceQuery('projectId', id)}`;
+  const capturePath = (id: string) => `/payments/new?from=dashboard&${resourceQuery('projectId', id)}`;
   capture.addEventListener('click', () => {
     if (projects.length === 0) return location.assign('/projects/new');
     if (projects.length === 1) return location.assign(capturePath(projects[0].id));
@@ -645,44 +605,6 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
     void report();
   }
 
-  function monthInYear(button: HTMLButtonElement) {
-    return `${year.valueAsNumber}-${button.dataset.month!.padStart(2, '0')}`;
-  }
-
-  function updatePicker() {
-    previousYear.disabled = !year.validity.valid || year.valueAsNumber <= Number(year.min);
-    nextYear.disabled = !year.validity.valid || year.valueAsNumber >= Number(year.max);
-    for (const button of periodMonths) {
-      const period = monthInYear(button);
-      button.disabled = !Number.isInteger(year.valueAsNumber) || !year.validity.valid || period > currentMonth;
-      button.setAttribute('aria-pressed', String(period === selectedMonth));
-      button.setAttribute('aria-label', !year.validity.valid || !year.value
-        ? button.textContent!.trim() : periodName(period));
-    }
-  }
-
-  month.addEventListener('click', () => {
-    year.max = currentMonth.slice(0, 4);
-    year.value = selectedMonth.slice(0, 4);
-    updatePicker();
-    monthDialog.showModal();
-    const selected = periodMonths.find(button => button.getAttribute('aria-pressed') === 'true');
-    (selected ?? year).focus();
-  });
-  year.addEventListener('input', updatePicker);
-  previousYear.addEventListener('click', () => { year.stepDown(); updatePicker(); });
-  nextYear.addEventListener('click', () => { year.stepUp(); updatePicker(); });
-  for (const button of periodMonths) {
-    button.addEventListener('click', () => {
-      monthDialog.close();
-      selectPeriod(monthInYear(button));
-    });
-  }
-  currentPeriod.addEventListener('click', () => {
-    monthDialog.close();
-    selectPeriod(currentMonth);
-  });
-
   function filterCollections() {
     const query = search.value.trim().toLocaleLowerCase('es-MX');
     for (const list of lists.slice(0, 2)) {
@@ -804,7 +726,7 @@ const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 
     monthlyPaidTotals = {};
     chartBars.replaceChildren();
     chartYear.textContent = '';
-    monthDialog.close();
+    picker.close();
     monthCaption.textContent = 'Mes del reporte';
     month.removeAttribute('aria-label');
     for (const id of ['dashboard-period', 'month-count', 'active-clients', 'active-projects', 'client-count', 'project-count', 'payment-count']) {

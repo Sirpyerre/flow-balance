@@ -1,0 +1,18 @@
+<label class="theme-selector"><span>Tema</span>
+  <select data-theme-selector aria-label="Tema">
+    <option value="dark">Oscuro</option>
+    <option value="light">Claro</option>
+  </select>
+</label>
+<script>
+  import { applyTheme, readTheme } from '../lib/theme-preference';
+  const controls = document.querySelectorAll<HTMLSelectElement>('[data-theme-selector]');
+  for (const control of controls) {
+    control.value = readTheme();
+    control.addEventListener('change', () => {
+      const theme = control.value === 'light' ? 'light' : 'dark';
+      applyTheme(theme);
+      controls.forEach(item => { item.value = theme; });
+    });
+  }
+</script>

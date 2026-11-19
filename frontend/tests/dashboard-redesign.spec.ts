@@ -29,9 +29,12 @@ test('matches dashboard figures, opens project capture and paginates history', a
   await page.getByRole('button', { name: 'Registrar cobro' }).click();
   await expect(page).toHaveURL(new RegExp(`projectId=${pending.id}$`));
 
-  const settled = await write('/api/projects', { ...agreement, name: 'Acuerdo liquidado', agreedAmount: '6723' });
+  const settled = await write('/api/projects', { ...agreement, name: 'Acuerdo liquidado', agreedAmount: '17723' });
   for (const [projectId, clientPaidAmount, paidOn] of [
-    [pending.id, '6600', '2025-10-07'],
+    [pending.id, '6600', '2025-09-07'],
+    [settled.id, '4000', '2025-03-10'],
+    [settled.id, '5000', '2025-10-09'],
+    [settled.id, '2000', '2025-10-16'],
     [settled.id, '4500', '2025-11-09'],
     [settled.id, '723', '2025-11-13'],
     [settled.id, '1500', '2025-11-05'],
@@ -42,11 +45,18 @@ test('matches dashboard figures, opens project capture and paginates history', a
   await page.goto('/dashboard');
   await selectReportMonth(page, '2025-11');
   await expect(page.locator('#total')).toHaveText('MXN 6,723.00');
+  const desktopPeriod = page.getByRole('button', { name: 'Mes del reporte: Noviembre 2025' });
+  await expect(desktopPeriod.locator('svg')).toHaveCSS('width', '16px');
+  await expect(desktopPeriod.locator('svg')).toHaveCSS('fill', 'none');
+  const periodBounds = (await desktopPeriod.boundingBox())!;
+  const captureBounds = (await page.getByRole('button', { name: 'Registrar cobro' }).boundingBox())!;
+  expect(periodBounds.height).toBeLessThanOrEqual(48);
+  expect(periodBounds.x + periodBounds.width).toBeLessThan(captureBounds.x);
   await expect(page.locator('#report-payments a')).toHaveCount(3);
   const chart = page.getByRole('group', { name: 'Elige un mes para consultar su reporte' });
   await expect(chart.getByRole('button', { name: 'Noviembre 2025, MXN 6,723.00' })).toHaveAttribute('aria-pressed', 'true');
-  await chart.getByRole('button', { name: 'Octubre 2025, MXN 6,600.00' }).click();
-  await expect(page.getByRole('button', { name: 'Mes del reporte: Octubre 2025' })).toBeVisible();
+  await chart.getByRole('button', { name: 'Septiembre 2025, MXN 6,600.00' }).click();
+  await expect(page.getByRole('button', { name: 'Mes del reporte: Septiembre 2025' })).toBeVisible();
   await expect(page.locator('#total')).toHaveText('MXN 6,600.00');
   const search = page.getByRole('searchbox', { name: 'Buscar clientes o proyectos' });
   await search.fill('Integra');
@@ -69,6 +79,8 @@ test('matches dashboard figures, opens project capture and paginates history', a
 
   await page.setViewportSize({ width: 360, height: 760 });
   const periodButton = page.getByRole('button', { name: 'Mes del reporte: Diciembre 2025' });
+  await expect(periodButton.locator('svg')).toHaveCSS('height', '16px');
+  expect((await periodButton.boundingBox())!.height).toBeLessThanOrEqual(48);
   await periodButton.click();
   const monthPicker = page.getByRole('dialog', { name: 'Mes del reporte' });
   await expect(monthPicker.getByRole('button', { name: 'Diciembre 2025' })).toBeFocused();
@@ -80,13 +92,38 @@ test('matches dashboard figures, opens project capture and paginates history', a
   await selectReportMonth(page, '2021-02');
   await expect(page.getByRole('button', { name: 'Mes del reporte: Febrero 2021' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
-  await page.route('**/api/payments', async route => {
-    const response = await route.fetch({ url: route.request().url() + '?limit=2' });
-    await route.fulfill({ response });
-  }, { times: 1 });
+  await page.route(/\/api\/payments(?:\?|$)/, async route => {
+    const url = new URL(route.request().url());
+    url.searchParams.set('limit', '2');
+    await route.fulfill({ response: await route.fetch({ url: url.toString() }) });
+  });
   await page.getByRole('link', { name: 'Ver todos' }).click();
   await expect(page.locator('#history a')).toHaveCount(2);
+  await expect(page.locator('#history-total')).toHaveText('MXN 24,323.00');
+  await expect(page.locator('#history-latest')).toContainText('13');
+  await page.getByRole('button', { name: 'Noviembre 2025' }).click();
+  await expect(page.locator('#history-total')).toHaveText('MXN 6,723.00');
+  await expect(page.locator('#history a')).toHaveCount(2);
   await page.getByRole('button', { name: 'Cargar más cobros' }).click();
-  await expect(page.locator('#history a')).toHaveCount(4);
+  await expect(page.locator('#history a')).toHaveCount(3);
+  await expect(page.locator('#history-total')).toHaveText('MXN 6,723.00');
   await expect(page.getByRole('button', { name: 'Cargar más cobros' })).toBeHidden();
+
+  let releaseSeptember!: () => void;
+  let markSeptemberRequested!: () => void;
+  const septemberRequested = new Promise<void>(resolve => { markSeptemberRequested = resolve; });
+  const holdSeptember = new Promise<void>(resolve => { releaseSeptember = resolve; });
+  await page.route('**/api/payments?month=2025-09', async route => {
+    const response = await route.fetch();
+    markSeptemberRequested();
+    await holdSeptember;
+    await route.fulfill({ response }).catch(() => {});
+  });
+  await page.getByRole('button', { name: 'Septiembre 2025' }).click();
+  await septemberRequested;
+  await page.getByRole('button', { name: 'Noviembre 2025' }).click();
+  await expect(page.locator('#history-total')).toHaveText('MXN 6,723.00');
+  releaseSeptember();
+  await expect(page.getByRole('button', { name: 'Noviembre 2025' })).toHaveAttribute('aria-pressed', 'true');
+
 });

@@ -11,7 +11,7 @@ test('registers a project, records income and charges, and opens the monthly rep
   await page.getByLabel('Confirma tu contraseña').fill('Income-test-password-2026!');
   await page.getByRole('button', { name: 'Crear cuenta' }).click();
   await page.getByRole('link', { name: 'Crear mi primer proyecto' }).click();
-  await page.getByRole('link', { name: 'Crear cliente' }).click();
+  await page.getByRole('button', { name: 'Crear cliente' }).click();
   await page.getByLabel('Nombre del cliente').fill('Estudio Norte');
   await page.getByRole('button', { name: 'Guardar cliente' }).click();
   await expect(page.getByRole('combobox', { name: 'Cliente' }).locator('option:checked')).toHaveText('Estudio Norte');

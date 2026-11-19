@@ -56,6 +56,31 @@ final class IncomeMigrationTest extends TestCase
             }
             $database->exec('ROLLBACK TO SAVEPOINT recorded_delivery');
             $delivery->down();
+            $agreements = $migration('CreateProjectAgreementRevisions', '20261119000400_create_project_agreement_revisions');
+            $agreements->up();
+            $agreements->down();
+            $agreements->up();
+            $database->exec('SAVEPOINT agreement_owner');
+            try {
+                $database->exec("INSERT INTO project_agreement_revisions
+                    (user_id, project_id, previous_agreed_amount, agreed_amount, client_paid_total, excess_amount, reason)
+                    VALUES (2,1,5000,2000,3000,1000,'Correction')");
+                self::fail('Expected an account ownership constraint');
+            } catch (PDOException $error) {
+                self::assertSame('23503', $error->getCode());
+                $database->exec('ROLLBACK TO SAVEPOINT agreement_owner');
+            }
+            $database->exec("INSERT INTO project_agreement_revisions
+                (user_id, project_id, previous_agreed_amount, agreed_amount, client_paid_total, excess_amount, reason)
+                VALUES (1,1,5000,2000,3000,1000,'Correction')");
+            try {
+                $agreements->down();
+                self::fail('Expected the agreement rollback guard');
+            } catch (RuntimeException $error) {
+                self::assertStringContainsString('Preserve project agreement revisions', $error->getMessage());
+            }
+            $database->exec('DELETE FROM project_agreement_revisions');
+            $agreements->down();
             $corrections = $migration('AddPaymentCorrections', '20261119000100_add_payment_corrections');
             $corrections->up();
             self::assertSame('1', $database->query('SELECT version::text FROM payments')->fetchColumn());

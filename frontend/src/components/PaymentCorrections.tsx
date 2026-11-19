@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { amountLabel, incomeRequest, IncomeError, resourceQuery, todayInMexico, type Payment } from '../lib/income-api';
 
+import DiscardChangesDialog from './DiscardChangesDialog';
 import ProjectPaymentSummary, { useProjectPaymentSummary } from './ProjectPaymentSummary';
 
 export default function PaymentCorrections({ payment, active, onEdited, onRefresh }: {
@@ -17,6 +18,8 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
+  const [editDraft, setEditDraft] = useState<Record<string, FormDataEntryValue>>();
+  const [preview, setPreview] = useState<{ receivedAmount: string; projectedOutstandingBalance: string | null; requiresExcessReason: boolean; isBalanceProvisional: boolean }>();
   const [reasonRequired, setReasonRequired] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const request = useRef<AbortController>(undefined);
@@ -29,10 +32,26 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
     if (active && mode === 'delete') dialog.current?.showModal();
   }, [active, mode]);
 
+  useEffect(() => {
+    setPreview(undefined);
+    if (!editDraft || mode !== 'edit' || !active) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void incomeRequest<NonNullable<typeof preview>>(`/api/payments/${encodeURIComponent(payment.id)}/preview`, {
+        body: { clientPaidAmount: editDraft.clientPaidAmount, platformFee: editDraft.platformFee, withheldTaxAmount: editDraft.withheldTaxAmount,
+          currency: editDraft.currency, exchangeRate: editDraft.currency === 'USD' ? editDraft.exchangeRate : null,
+          confirmCurrencyChange: editDraft.confirmCurrencyChange === 'on' },
+        version: draftPayment.version, signal: controller.signal, passive: true,
+      }).then(result => { if (!controller.signal.aborted) setPreview(result); }).catch(() => {});
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [active, mode, editDraft, payment.id, draftPayment.version]);
+
   function close() {
     if (pending) return;
     dialog.current?.close();
     setMode(undefined);
+    setEditDraft(undefined);
     setSelectedPayment(undefined);
     setError('');
     setConflict(false);
@@ -67,6 +86,7 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
           version: draftPayment.version, signal: controller.signal });
         if (!controller.signal.aborted) {
           setMode('saved');
+          setEditDraft(undefined);
           setSelectedPayment(undefined);
           attempt.current = undefined;
           setReasonRequired(false);
@@ -113,14 +133,15 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
         summary.refresh();
         setMode('edit');
       }} hidden={mode === 'edit' || mode === 'delete'}>Editar cobro</button>
-      <button ref={deleteButton} type="button" onClick={() => {
+      <button ref={deleteButton} className="danger" type="button" onClick={() => {
         setSelectedPayment(payment);
         setMode('delete');
       }} hidden={mode === 'edit'}>Eliminar cobro</button>
     </div>
     {mode === 'saved' && <ProjectPaymentSummary summary={summary} mode="saved" />}
-    {mode === 'edit' && <form onSubmit={submit} aria-label="Editar cobro">
-      <ProjectPaymentSummary summary={summary} mode="edit" />
+    {mode === 'edit' && <form onSubmit={submit} aria-label="Editar cobro" onChange={event => setEditDraft(Object.fromEntries(new FormData(event.currentTarget)))}>
+      <p>Proyecto <strong>{payment.project.name}</strong></p>
+      <ProjectPaymentSummary summary={summary} mode="edit" projectedBalance={preview?.projectedOutstandingBalance} projectedProvisional={preview?.isBalanceProvisional} />
       <fieldset disabled={pending || retrying || conflict}>
         <label>Moneda<select name="currency" value={currency} onChange={event => setCurrency(event.target.value)}>
           {originalCurrency !== 'MXN' && originalCurrency !== 'USD' && <option value={originalCurrency}>{originalCurrency}</option>}
@@ -138,12 +159,13 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
         {source !== '' && source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" defaultValue={draftPayment.sourceName ?? ''} required maxLength={100} /></label>}
         <label>Comisión de plataforma ({currency})<input name="platformFee" inputMode="decimal" defaultValue={draftPayment.platformFee} required /></label>
         <label>Impuestos descontados ({currency})<input name="withheldTaxAmount" inputMode="decimal" defaultValue={draftPayment.withheldTaxAmount} required /></label>
-        <label>Razón del excedente<input name="excessReason" maxLength={250} required={reasonRequired} /></label>
+        <label>Razón del excedente<input name="excessReason" maxLength={250} required={reasonRequired || preview?.requiresExcessReason} /></label>
       </fieldset>
+      {preview && <output className="income-net">Dinero recibido al cobrar: {amountLabel(preview.receivedAmount, currency)}</output>}
       {feedback}
       <div className="correction-actions">
-        <button type="submit" className="button primary" disabled={pending || conflict || !['MXN', 'USD'].includes(currency)}>{retrying ? 'Reintentar guardado' : 'Guardar cambios'}</button>
-        <button type="button" onClick={close} disabled={pending}>Cancelar</button>
+        <button type="submit" className="button primary" aria-busy={pending} disabled={pending || conflict || !['MXN', 'USD'].includes(currency)}>{retrying ? 'Reintentar guardado' : 'Guardar cambios'}</button>
+        <DiscardChangesDialog dirty={Boolean(editDraft)} onDiscard={close} disabled={pending} />
       </div>
     </form>}
     {active && mode === 'delete' && <dialog ref={dialog} aria-labelledby="delete-payment-title" onCancel={event => { event.preventDefault(); close(); }}>
@@ -160,7 +182,7 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
         {feedback}
         <div className="correction-actions">
           <button autoFocus type="button" onClick={close} disabled={pending}>Cancelar</button>
-          <button type="submit" className="button primary" disabled={pending || conflict}>Confirmar eliminación</button>
+          <button type="submit" className="button danger" aria-busy={pending} disabled={pending || conflict}>Confirmar eliminación</button>
         </div>
       </form>
     </dialog>}

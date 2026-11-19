@@ -8,4 +8,5 @@ export async function selectReportMonth(page: Page, period: string) {
   const picker = page.getByRole('dialog', { name: 'Mes del reporte' });
   await picker.getByRole('spinbutton', { name: 'Año', exact: true }).fill(year);
   await picker.getByRole('button', { name: `${month[0].toUpperCase()}${month.slice(1)} ${year}`, exact: true }).click();
+  await picker.getByRole("button", { name: "Aplicar" }).click();
 }

@@ -57,11 +57,13 @@ un cliente y su proyecto, registrar un cobro en MXN y abrir su detalle para
 capturar cargos separados. El selector de mes del tablero enlaza cada cobro
 que integra el importe abonado del periodo.
 
-El tablero, `/clients/new`, `/projects/new`, `/projects/view`, `/payments/new`
-y `/payments/view` son rutas privadas. Sus documentos y las respuestas privadas
+El tablero y las rutas bajo `/clients`, `/projects` y `/payments` son
+privados. Sus documentos y las respuestas privadas
 de `/api` se sirven con `Cache-Control: private, no-store`. El service worker
 excluye esas rutas de su caché. Consulta la [guía de validación del MVP](../specs/002-register-income/quickstart.md)
-para usar una base aislada.
+para usar una base aislada. El [registro de usabilidad](validation/app-usability.md)
+documenta el tablero actual, los temas, los cambios en cobros y la migración
+de revisiones de acuerdos.
 
 
 ## IP efectiva para el límite de inicio de sesión

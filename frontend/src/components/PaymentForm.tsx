@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react';
 import { amountLabel, IncomeError, incomeRequest, resourceQuery, todayInMexico, type Payment, type PaymentCurrency, type PaymentEquivalents, type Project } from '../lib/income-api';
 
+import DiscardChangesDialog from './DiscardChangesDialog';
 import ProjectPaymentSummary, { useProjectPaymentSummary } from './ProjectPaymentSummary';
 
-type Preview = { equivalents: PaymentEquivalents; receivedAmount: string; excessAmount: string | null; requiresExcessReason: boolean };
+type Preview = { equivalents: PaymentEquivalents; receivedAmount: string; excessAmount: string | null; requiresExcessReason: boolean; projectedOutstandingBalance: string | null };
 
-export default function PaymentForm({ project, active }: { project: Project; active: boolean }) {
+export default function PaymentForm({ project, active, selection, cancelPath }: { project: Project; active: boolean; selection: ReactNode; cancelPath: string }) {
+  const [dirty, setDirty] = useState(false);
   const [amount, setAmount] = useState('');
   const [fee, setFee] = useState('');
   const [tax, setTax] = useState('');
@@ -27,7 +29,7 @@ export default function PaymentForm({ project, active }: { project: Project; act
   useEffect(() => () => inFlight.current?.abort(), []);
   useEffect(() => {
     setPreview(undefined);
-    if (!amount || saved || (currency === 'USD' && !exchangeRate)) return;
+    if (!active || !amount || saved || (currency === 'USD' && !exchangeRate)) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void incomeRequest<Preview>('/api/payments/preview', {
@@ -36,7 +38,7 @@ export default function PaymentForm({ project, active }: { project: Project; act
       }).then(result => { if (!controller.signal.aborted) setPreview(result); }).catch(() => {});
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [project.id, amount, fee, tax, currency, exchangeRate, saved]);
+  }, [active, project.id, amount, fee, tax, currency, exchangeRate, saved]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,7 +89,8 @@ export default function PaymentForm({ project, active }: { project: Project; act
       <h1>Registrar cobro</h1>
       <p>{project.name} · {project.client.name}</p>
     </header>
-    <form ref={form} className="payment-entry-form" onSubmit={submit} noValidate>
+    <form ref={form} className="payment-entry-form" onSubmit={submit} onChange={() => setDirty(true)} noValidate>
+      <fieldset disabled={pending || retrying}>{selection}</fieldset>
       <fieldset className="payment-entry-source" disabled={pending || retrying}>
         <label>Fecha de pago<input name="paidOn" type="date" defaultValue={todayInMexico()} max={todayInMexico()} required /></label>
         <label>Fuente del cobro<select name="sourceType" value={source} onChange={event => setSource(event.target.value)}>
@@ -99,13 +102,13 @@ export default function PaymentForm({ project, active }: { project: Project; act
         </select></label>
         {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal" value={exchangeRate} onChange={event => setExchangeRate(event.target.value)} required /></label>}
       </fieldset>
-      <ProjectPaymentSummary summary={summary} mode="create" />
+      <ProjectPaymentSummary summary={summary} mode="create" projectedBalance={preview?.projectedOutstandingBalance} />
       <fieldset className="payment-entry-amounts" disabled={pending || retrying}>
         <label>Importe ({currency})<input name="clientPaidAmount" placeholder="0.00" inputMode="decimal" value={amount} onChange={event => { setAmount(event.target.value); setError(undefined); }} required /></label>
         <label>Comisión{currency === 'USD' && ' (USD)'}<input name="platformFee" inputMode="decimal" value={fee} onChange={event => setFee(event.target.value)} placeholder="0.00" /></label>
         <label>Impuestos{currency === 'USD' && ' (USD)'}<input name="withheldTaxAmount" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} placeholder="0.00" /></label>
-        {preview && <output>Dinero recibido al cobrar: {amountLabel(preview.receivedAmount, currency)}
-          {currency === 'USD' && preview.equivalents && <><br />Importe abonado equivalente: {amountLabel(preview.equivalents.clientPaidAmount)}
+        {<output className="income-net">Dinero recibido al cobrar: {preview ? amountLabel(preview.receivedAmount, currency) : '—'}
+          {currency === 'USD' && preview?.equivalents && <><br />Importe abonado equivalente: {amountLabel(preview.equivalents.clientPaidAmount)}
             <br />Dinero recibido equivalente: {amountLabel(preview.equivalents.receivedAmount)}</>}
         </output>}
         <div hidden={!excess}>
@@ -115,8 +118,8 @@ export default function PaymentForm({ project, active }: { project: Project; act
       </fieldset>
       {error && <p role="alert">{error.message}</p>}
       <div className="payment-entry-actions">
-        <a className="button" href={`/projects/view?${resourceQuery('id', project.id)}`}>Cancelar</a>
-        <button className="button primary" disabled={pending}>Guardar cobro</button>
+        <DiscardChangesDialog dirty={dirty} href={cancelPath} />
+        <button className="button primary" aria-busy={pending} disabled={pending}>Guardar cobro</button>
       </div>
     </form>
   </>;

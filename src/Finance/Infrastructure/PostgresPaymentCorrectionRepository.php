@@ -40,9 +40,10 @@ final readonly class PostgresPaymentCorrectionRepository
         $amount = PaymentConversion::PAYMENT_AMOUNT;
         $replacement = (new PaymentConversion($this->database))->equivalents($amounts, $currency, $rate)['clientPaidAmount'];
         $query = $this->database->prepare("SELECT COALESCE(SUM({$amount}), 0.00)::text AS previous,
-            (COALESCE(SUM({$amount}) FILTER (WHERE id <> CAST(? AS bigint)), 0.00) + CAST(? AS numeric))::text AS projected
+            (COALESCE(SUM({$amount}) FILTER (WHERE id <> CAST(? AS bigint)), 0.00) + CAST(? AS numeric))::text AS projected,
+            COUNT(*) FILTER (WHERE id <> CAST(? AS bigint) AND {$amount} IS NULL) > 0 AS provisional
             FROM payments WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL");
-        $query->execute([$payment['id'], $replacement, $payment['user_id'], $payment['project_id']]);
+        $query->execute([$payment['id'], $replacement, $payment['id'], $payment['user_id'], $payment['project_id']]);
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 

@@ -135,6 +135,7 @@ return static function (Application $app): void {
     foreach ([
         '/api/clients' => 'client',
         '/api/projects' => 'project',
+        '/api/projects/{id}/agreement-preview' => 'agreement-preview',
         '/api/payments/preview' => 'preview',
         '/api/payments' => 'payment',
         '/api/payments/{id}/charges' => 'charge',
@@ -150,6 +151,7 @@ return static function (Application $app): void {
         $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
         return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new PaymentCorrectionHandler());
     };
+    $app->post('/api/payments/{id}/preview', [$transaction, $private, $correctPayment], 'payments.preview-edit');
     $app->patch('/api/payments/{id}', [$transaction, $private, $correctPayment], 'payments.patch');
     $app->delete('/api/payments/{id}', [$transaction, $private, $correctPayment], 'payments.delete');
     foreach (['clients', 'projects', 'payments'] as $type) {

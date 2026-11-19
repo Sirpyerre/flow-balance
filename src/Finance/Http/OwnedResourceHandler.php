@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace FlowBalance\Finance\Http;
 
 use FlowBalance\Finance\Application\OwnedResourceChanges;
+use FlowBalance\Finance\Application\IncomeValidation;
+use FlowBalance\Finance\Application\ProjectAgreement;
 use FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository;
 use InvalidArgumentException;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -43,6 +45,17 @@ final readonly class OwnedResourceHandler implements RequestHandlerInterface
             if (isset($changes['clientId']) && !$repository->find('clients', $userId, $changes['clientId'], true)) {
                 throw new InvalidArgumentException('El cliente seleccionado no está disponible');
             }
+            $reason = $changes['agreementAdjustmentReason'] ?? null;
+            unset($changes['agreementAdjustmentReason']);
+            if ($changes === []) {
+                throw new InvalidArgumentException('Revisa los campos indicados');
+            }
+            if (isset($changes['agreedAmount'])) {
+                ProjectAgreement::recordAdjustment($repository, $userId, $id, $changes['agreedAmount'], $reason);
+            }
+        } catch (IncomeValidation $error) {
+            return new JsonResponse(['error' => ['code' => 'validation_failed', 'message' => $error->getMessage(),
+                'fields' => [$error->field => $error->getMessage()]], ...$error->context], 422);
         } catch (InvalidArgumentException $error) {
             return new JsonResponse(['error' => ['code' => 'validation_failed', 'message' => $error->getMessage()]], 422);
         }

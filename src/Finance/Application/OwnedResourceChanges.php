@@ -18,7 +18,7 @@ final class OwnedResourceChanges
     {
         $allowed = match ($type) {
             'clients' => ['name'],
-            'projects' => ['name', 'clientId', 'deliveryStatus'],
+            'projects' => ['name', 'clientId', 'deliveryStatus', 'agreedAmount', 'agreedPaymentCount', 'acquisitionSource', 'agreementAdjustmentReason'],
             'payments' => ['clientPaidAmount'],
         };
         if (!$data || array_diff(array_keys($data), $allowed)) {
@@ -39,6 +39,15 @@ final class OwnedResourceChanges
         }
         if (array_key_exists('deliveryStatus', $data) && !in_array($data['deliveryStatus'], ['in_progress', 'delivered'], true)) {
             throw new InvalidArgumentException('Selecciona un estado de entrega válido');
+        }
+        if (array_key_exists('agreedAmount', $data)) {
+            $data['agreedAmount'] = PaymentAmounts::normalize($data['agreedAmount'], 'agreedAmount');
+        }
+        if (array_key_exists('agreedPaymentCount', $data)) {
+            $data['agreedPaymentCount'] = ProjectAgreement::paymentCount($data['agreedPaymentCount']);
+        }
+        if (array_key_exists('acquisitionSource', $data)) {
+            $data['acquisitionSource'] = PaymentInput::text($data['acquisitionSource'], 'acquisitionSource', 100);
         }
         if (array_key_exists('clientPaidAmount', $data)) {
             try {

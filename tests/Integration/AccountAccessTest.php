@@ -336,7 +336,17 @@ final class AccountAccessTest extends TestCase
             self::assertCount(2, $list['payments']);
             $next = $this->request($app, 'GET', '/api/payments?limit=2&cursor=' . urlencode($list['nextCursor']), $cookie)[1];
             self::assertEmpty(array_intersect(array_column($list['payments'], 'id'), array_column($next['payments'], 'id')));
-            self::assertSame(['payments' => [], 'nextCursor' => null], $this->request($app, 'GET', '/api/payments', $other)[1]);
+            $emptyHistory = $this->request($app, 'GET', '/api/payments?month=2025-11', $other)[1];
+            self::assertSame([], $emptyHistory['payments']);
+            self::assertSame([], $emptyHistory['recentMonths']);
+            self::assertSame(0, $emptyHistory['summary']['paymentCount']);
+            $history = $this->request($app, 'GET', '/api/payments?month=2025-11&limit=1', $cookie)[1];
+            self::assertCount(1, $history['payments']);
+            self::assertSame(['2025-12', '2025-11'], $history['recentMonths']);
+            self::assertSame(['MXN' => '3000.04', 'USD' => '100.00'], $history['summary']['totalsByCurrency']);
+            self::assertSame('2025-11-30', $history['summary']['latestPaidOn']);
+            self::assertSame(422, $this->request($app, 'GET', '/api/payments?month=2025-12&cursor=' . urlencode($history['nextCursor']), $cookie)[0]);
+            self::assertSame(0, $this->request($app, 'GET', '/api/payments?month=2025-01', $cookie)[1]['summary']['paymentCount']);
             self::assertSame(422, $this->request($app, 'GET', '/api/payments?cursor=bad', $cookie)[0]);
             foreach (['outstandingBalance', 'excessAmount', 'clientPaidTotal', 'collectionStatus'] as $field) {
                 self::assertSame($afterCommit[$field], $report['projects'][0][$field]);
@@ -366,11 +376,49 @@ final class AccountAccessTest extends TestCase
             self::assertSame('overpaid', $overpaid['collectionStatus']);
             self::assertSame('300.00', $overpaid['excessAmount']);
             self::assertSame('0.00', $overpaid['outstandingBalance']);
+            $previewPath = $detailPath . '/agreement-preview';
+            self::assertSame(404, $this->write($app, $previewPath, ['agreedAmount' => '4500'], $other)[0]);
+            [$previewStatus, $preview] = $this->write($app, $previewPath, ['agreedAmount' => '4500'], $cookie);
+            self::assertSame(200, $previewStatus);
+            self::assertSame('800.00', $preview['excessAmount']);
+            self::assertTrue($preview['requiresAdjustmentReason']);
+            self::assertTrue($preview['isBalanceProvisional']);
+            self::assertSame(201, $this->write($app, '/api/payments', [...$december, 'clientPaidAmount' => '100',
+                'excessReason' => 'Nuevo abono'], $cookie, key: 'after-preview')[0]);
+            [$invalidAdjustmentStatus, $invalidAdjustment] = $this->write($app, $detailPath, ['agreedAmount' => '4500'], $cookie, 'PATCH');
+            self::assertSame(422, $invalidAdjustmentStatus);
+            self::assertSame('900.00', $invalidAdjustment['excessAmount']);
+            self::assertSame('5000.00', $this->request($app, 'GET', $detailPath, $cookie)[1]['agreedAmount']);
+            $adjustment = ['name' => 'Proyecto corregido', 'agreedAmount' => '4500', 'agreedPaymentCount' => 4,
+                'agreementAdjustmentReason' => 'Se corrigió el acuerdo inicial'];
+            self::assertSame(200, $this->write($app, $detailPath, $adjustment, $cookie, 'PATCH')[0]);
+            self::assertSame(200, $this->write($app, $detailPath, $adjustment, $cookie, 'PATCH')[0]);
+            $revisions = $database->prepare('SELECT reason FROM project_agreement_revisions WHERE user_id = ? AND project_id = ?');
+            $revisions->execute([$ana, $project]);
+            self::assertSame(['Se corrigió el acuerdo inicial'], $revisions->fetchAll(PDO::FETCH_COLUMN));
+            $newClient = (new CreateClient($database))->create($ana, 'Nuevo cliente');
+            self::assertSame(409, $this->write($app, $detailPath, ['clientId' => $newClient], $cookie, 'PATCH')[0]);
+            self::assertSame(200, $this->write($app, "/api/projects/{$historic}", ['clientId' => $newClient], $cookie, 'PATCH')[0]);
+
+            $database->beginTransaction();
+            (new \FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository($database))->find('projects', $ana, $project, true);
+            $writer->beginTransaction();
+            try {
+                $writer->exec("SET LOCAL lock_timeout = '150ms'");
+                (new RecordPayment($writer))->capture($ana, $project, '2025-12-02', 'concurrent-agreement',
+                    new \FlowBalance\Finance\Application\PaymentAmounts('10.00'), 'direct_client', null, 'Ajuste');
+                self::fail('Expected capture to wait for the project lock');
+            } catch (PDOException $error) {
+                self::assertSame('55P03', $error->getCode());
+            } finally {
+                $writer->rollBack();
+                $database->rollBack();
+            }
         } finally {
             if ($writer->inTransaction()) {
                 $writer->rollBack();
             }
-            foreach (['payment_charges', 'payments', 'projects', 'clients', 'server_sessions'] as $table) {
+            foreach (['project_agreement_revisions', 'payment_charges', 'payments', 'projects', 'clients', 'server_sessions'] as $table) {
                 $database->prepare("DELETE FROM {$table} WHERE user_id IN (?, ?)")->execute([$ana, $luis]);
             }
             $database->prepare('DELETE FROM users WHERE id IN (?, ?)')->execute([$ana, $luis]);
@@ -407,6 +455,17 @@ final class AccountAccessTest extends TestCase
             self::assertSame('2', $detail['version']);
             self::assertSame(412, $this->write($app, $path, [], $cookie, 'DELETE', version: '"1"')[0]);
             $edit = [...$edit, 'paidOn' => '2025-12-01', 'clientPaidAmount' => '2500'];
+            $previewInput = array_intersect_key($edit, array_flip(['clientPaidAmount', 'platformFee', 'withheldTaxAmount']));
+            self::assertSame(403, $this->request($app, 'POST', "$path/preview", $cookie, $previewInput, version: '"2"')[0]);
+            self::assertSame(404, $this->write($app, "$path/preview", $previewInput, $other, version: '"2"')[0]);
+            self::assertSame(412, $this->write($app, "$path/preview", $previewInput, $cookie, version: '"1"')[0]);
+            self::assertSame(422, $this->write($app, "$path/preview", [...$previewInput, 'projectId' => $project], $cookie, version: '"2"')[0]);
+            [$previewStatus, $preview] = $this->write($app, "$path/preview", $previewInput, $cookie, version: '"2"');
+            self::assertSame(200, $previewStatus, json_encode($preview));
+            self::assertSame('2500.00', $preview['projectedOutstandingBalance']);
+            self::assertSame('2300.00', $preview['receivedAmount']);
+            self::assertFalse($preview['isBalanceProvisional']);
+            self::assertSame('2', $this->request($app, 'GET', $path, $cookie)[1]['version']);
             self::assertSame(404, $this->write($app, $path, $edit, $other, 'PATCH', 'edit', '"2"')[0]);
             self::assertSame(403, $this->request($app, 'PATCH', $path, $cookie, $edit, version: '"2"')[0]);
             self::assertSame(422, $this->write($app, $path, [...$edit, 'paidOn' => '2999-01-01'], $cookie, 'PATCH', 'edit', '"2"')[0]);

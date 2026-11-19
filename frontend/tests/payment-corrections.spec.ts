@@ -85,6 +85,7 @@ test('edits, retries and removes a payment from a mobile viewport', async ({ pag
   await expect(form.getByText('1 de 1 pago recibido')).toBeVisible();
   await expect(form.getByRole('button', { name: 'Revisar cobro vigente' })).toBeVisible();
   await form.getByRole('button', { name: 'Cancelar' }).click();
+  await page.getByRole('dialog', { name: 'Descartar cambios' }).getByRole('button', { name: 'Descartar cambios' }).click();
   await page.getByRole('button', { name: 'Eliminar cobro' }).click();
   await dialog.getByRole('button', { name: 'Confirmar eliminación' }).click();
   await expect(dialog.getByRole('alert')).toContainText('El cobro cambió');

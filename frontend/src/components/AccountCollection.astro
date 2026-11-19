@@ -1,0 +1,66 @@
+---
+const { collection } = Astro.props as { collection: 'clients' | 'projects' };
+const isClient = collection === 'clients';
+---
+<section class="income-workspace" data-collection={collection}>
+  <a class="income-back" href="/dashboard">Volver al tablero</a>
+  <header class="workspace-heading">
+    <h1>{isClient ? 'Clientes' : 'Proyectos'}</h1>
+    <a class="button primary" href={`/${collection}/new`}>{isClient ? 'Nuevo cliente' : 'Nuevo proyecto'}</a>
+  </header>
+  <p id="status" role="status">Verificando tu sesión…</p>
+  <button class="button" type="button" hidden>Reintentar</button>
+  <ul class="income-panel income-records" role="list" hidden></ul>
+</section>
+<script>
+  import { incomeRequest, resourceQuery, type Client } from '../lib/income-api';
+  import { watchPrivateSession } from '../lib/private-session';
+
+  const panel = document.querySelector<HTMLElement>('[data-collection]')!;
+  const collection = panel.dataset.collection === 'projects' ? 'projects' : 'clients';
+  const status = panel.querySelector<HTMLElement>('[role="status"]')!;
+  const list = panel.querySelector('ul')!;
+  const retry = panel.querySelector('button')!;
+  const collator = new Intl.Collator('es-MX', { sensitivity: 'base' });
+  let request: AbortController | undefined;
+
+  function clear() {
+    request?.abort();
+    list.hidden = retry.hidden = true;
+    list.replaceChildren();
+    status.textContent = 'Verificando tu sesión…';
+  }
+  async function load() {
+    clear();
+    const current = new AbortController();
+    request = current;
+    try {
+      const data = await incomeRequest<{ clients: Client[]; projects: (Client & { clientId: string })[] }>('/api/dashboard', { signal: current.signal, passive: true });
+      if (current.signal.aborted) return;
+      const clients = new Map(data.clients.map(client => [client.id, client.name]));
+      const rows = data[collection].slice().sort((first, second) => collator.compare(first.name, second.name));
+      status.textContent = rows.length ? '' : collection === 'clients' ? 'Aún no tienes clientes.' : 'Aún no tienes proyectos.';
+      for (const row of rows) {
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = `/${collection}/view?${resourceQuery('id', row.id)}`;
+        link.textContent = row.name;
+        item.append(link);
+        if ('clientId' in row) {
+          const client = document.createElement('span');
+          client.textContent = clients.get(row.clientId) ?? '';
+          item.append(client);
+        }
+        list.append(item);
+      }
+      list.hidden = rows.length === 0;
+    } catch {
+      if (current.signal.aborted) return;
+      status.textContent = 'No se pudo cargar el listado.';
+      retry.hidden = false;
+    }
+  }
+  const session = watchPrivateSession(clear, () => void load(), clear);
+  retry.addEventListener('click', () => session.verify());
+  session.verify();
+</script>

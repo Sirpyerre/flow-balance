@@ -54,17 +54,8 @@ final readonly class EditPayment
                 'paid_on' => PaymentInput::date($body['paidOn'] ?? null),
                 'source_type' => $source, 'source_name' => $name,
             ];
-            $currency = $body['currency'] ?? $original['currency'];
-            if (!in_array($currency, ['MXN', 'USD'], true) || !in_array($original['currency'], ['MXN', 'USD'], true)) {
-                throw new IncomeValidation('currency', 'Selecciona MXN o USD.');
-            }
+            [$currency, $rate] = $this->conversion($body, $original);
             $changedCurrency = $currency !== $original['currency'];
-            if ($changedCurrency && ($body['confirmCurrencyChange'] ?? false) !== true) {
-                throw new IncomeValidation('currency', 'Confirma los importes en la moneda de destino.');
-            }
-            $rate = PaymentConversion::rate($currency, $changedCurrency
-                ? ($body['exchangeRate'] ?? null)
-                : (array_key_exists('exchangeRate', $body) ? $body['exchangeRate'] : ($original['exchange_rate'] ?? null)));
             if ($changedCurrency || $currency === 'USD') {
                 $fields += ['currency' => $currency, 'exchange_rate' => $rate];
             }
@@ -87,6 +78,48 @@ final readonly class EditPayment
             $fields['excess_reason'] = $reason;
         }
         $this->repository->change($payment, 'edit', $fields, $reason, $legacy ? null : $key, $fingerprint);
+    }
+
+    public function preview(string $userId, string $id, array $body, string $version): array
+    {
+        $payment = $this->repository->lock($userId, $id);
+        if ($payment['deleted_at'] !== null) {
+            throw new IncomeNotFound();
+        }
+        if ($version !== $payment['version']) {
+            throw new PaymentVersionConflict();
+        }
+        if (array_diff(array_keys($body), ['clientPaidAmount', 'platformFee', 'withheldTaxAmount', 'currency', 'exchangeRate', 'confirmCurrencyChange'])) {
+            throw new IncomeValidation('payment', 'Revisa los campos indicados.');
+        }
+        $amounts = new PaymentAmounts($body['clientPaidAmount'] ?? null, $body['platformFee'] ?? null, $body['withheldTaxAmount'] ?? null);
+        [$currency, $rate] = $this->conversion($body, $payment);
+        $totals = $this->repository->totals($payment, $amounts, $currency, $rate);
+        $balance = ProjectBalance::calculate($payment['agreed_amount'], $totals['projected']);
+
+        return [
+            'receivedAmount' => $amounts->receivedAmount,
+            'projectedOutstandingBalance' => $balance['outstandingBalance'],
+            'excessAmount' => $balance['excessAmount'],
+            'requiresExcessReason' => self::increasesExcess($payment['agreed_amount'], $totals['previous'], $totals['projected']),
+            'isBalanceProvisional' => (bool) $totals['provisional'],
+        ];
+    }
+
+    private function conversion(array $body, array $original): array
+    {
+        $currency = $body['currency'] ?? $original['currency'];
+        if (!in_array($currency, ['MXN', 'USD'], true) || !in_array($original['currency'], ['MXN', 'USD'], true)) {
+            throw new IncomeValidation('currency', 'Selecciona MXN o USD.');
+        }
+        $changedCurrency = $currency !== $original['currency'];
+        if ($changedCurrency && ($body['confirmCurrencyChange'] ?? false) !== true) {
+            throw new IncomeValidation('currency', 'Confirma los importes en la moneda de destino.');
+        }
+        $rate = PaymentConversion::rate($currency, $changedCurrency
+            ? ($body['exchangeRate'] ?? null)
+            : (array_key_exists('exchangeRate', $body) ? $body['exchangeRate'] : ($original['exchange_rate'] ?? null)));
+        return [$currency, $rate];
     }
 
     public static function increasesExcess(?string $agreement, string $previous, string $projected): bool

@@ -30,14 +30,14 @@ export default function PaymentChargeForm({ paymentId, onSaved }: { paymentId: s
     }
   }
 
-  return <details className="income-charge-form">
+  return <details className="income-charge-form income-panel">
     <summary>Registrar cargo separado</summary>
     <form onSubmit={submit}>
       <label>Tipo de cargo<select name="chargeType"><option value="commission">Comisión</option><option value="tax">Impuesto</option></select></label>
       <label>Fecha del cargo<input name="paidOn" type="date" defaultValue={todayInMexico()} max={todayInMexico()} required /></label>
       <label>Importe del cargo (MXN)<input name="amount" inputMode="decimal" required /></label>
       {error && <p role="alert">{error}</p>}
-      <button className="button primary" disabled={pending}>Guardar cargo</button>
+      <button className="button primary" aria-busy={pending} disabled={pending}>Guardar cargo</button>
     </form>
   </details>;
 }

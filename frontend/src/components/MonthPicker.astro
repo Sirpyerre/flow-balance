@@ -1,0 +1,26 @@
+---
+const monthNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
+const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' });
+---
+  <dialog id="month-dialog" aria-labelledby="month-dialog-title">
+    <h2 id="month-dialog-title">Mes del reporte</h2>
+    <p class="period-note">Elige el mes que quieres revisar.</p>
+    <div class="period-year">
+      <button id="previous-year" type="button" aria-label="Año anterior">‹</button>
+      <label>
+        <span class="dashboard-sr">Año</span>
+        <input id="report-year" type="number" inputmode="numeric" min="1000" step="1" required />
+      </label>
+      <button id="next-year" type="button" aria-label="Año siguiente">›</button>
+    </div>
+    <div class="period-months" role="group" aria-label="Meses">
+      {monthNumbers.map(number => <button type="button" data-month={number} aria-pressed="false">
+        {monthLabel.format(new Date(Date.UTC(2024, number - 1, 1))).replace('.', '')}
+      </button>)}
+    </div>
+    <div class="period-actions">
+      <button type="button" id="current-period">Ir a este mes</button>
+      <form method="dialog"><button>Cancelar</button></form>
+      <button class="button primary" type="button" id="apply-period">Aplicar</button>
+    </div>
+  </dialog>

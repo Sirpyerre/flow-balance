@@ -16,7 +16,7 @@ final readonly class PostgresAccountDataReader
         $projects = $this->rows('SELECT id::text, name, client_id::text AS "clientId" FROM projects WHERE user_id = ? ORDER BY id', [$userId]);
         $payments = $this->rows('SELECT id::text, project_id::text AS "projectId",
             trim_scale(client_paid_amount)::text AS "clientPaidAmount", currency, paid_on AS "paidOn"
-            FROM payments WHERE user_id = ? ORDER BY id', [$userId]);
+            FROM payments WHERE user_id = ? AND deleted_at IS NULL ORDER BY id', [$userId]);
         $report = (new PostgresMonthlyReportReader($this->database))->read($userId, $month, 'MXN');
         return ['clients' => $clients, 'projects' => $projects, 'payments' => $payments,
             'month' => $month, 'currency' => 'MXN', 'clientPaidTotal' => $report['clientPaidTotal']];

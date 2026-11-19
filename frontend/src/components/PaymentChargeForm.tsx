@@ -30,7 +30,7 @@ export default function PaymentChargeForm({ paymentId, onSaved }: { paymentId: s
     }
   }
 
-  return <details>
+  return <details className="income-charge-form">
     <summary>Registrar cargo separado</summary>
     <form onSubmit={submit}>
       <label>Tipo de cargo<select name="chargeType"><option value="commission">Comisión</option><option value="tax">Impuesto</option></select></label>

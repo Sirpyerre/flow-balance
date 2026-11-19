@@ -8,17 +8,18 @@ export class IncomeError extends Error {
 
 export async function incomeRequest<T>(
   path: string,
-  options: { body?: Record<string, unknown>; key?: string; signal?: AbortSignal; passive?: boolean } = {},
+  options: { body?: Record<string, unknown>; key?: string; signal?: AbortSignal; passive?: boolean; method?: 'PATCH' | 'DELETE'; version?: string } = {},
 ): Promise<T> {
-  const { body, key, signal, passive } = options;
+  const { body, key, signal, passive, method, version } = options;
   const headers = new Headers();
   if (passive) headers.set('X-Session-Activity', 'passive');
   if (body) headers.set('Content-Type', 'application/json');
+  if (version) headers.set('If-Match', `"${version}"`);
   if (key) headers.set('Idempotency-Key', key);
   async function send() {
     if (body) headers.set('X-CSRF-Token', await csrfToken(signal));
     return fetch(path, {
-      method: body ? 'POST' : 'GET', headers, signal, cache: 'no-store',
+      method: method ?? (body ? 'POST' : 'GET'), headers, signal, cache: 'no-store',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
@@ -26,7 +27,7 @@ export async function incomeRequest<T>(
     ? await navigator.locks.request('flow-balance-income-write', { signal }, send)
     : await send();
   if (response.status === 401) location.replace('/login');
-  const data = await response.json();
+  const data = response.status === 204 ? undefined : await response.json();
   if (!response.ok) throw new IncomeError(response.status, data);
   dispatchEvent(new CustomEvent('income-session-response', { detail: response }));
   return data as T;
@@ -39,13 +40,34 @@ export type Client = { id: string; name: string };
 export type PaymentSummary = {
   id: string; paidOn: string; clientPaidAmount: string; sourceType: string | null; sourceName: string | null;
 };
-export type Project = {
+export const collectionStatusLabel = {
+  outstanding: 'Pendiente',
+  settled: 'Liquidado',
+  overpaid: 'Con excedente',
+  undetermined: 'Saldo por determinar',
+};
+
+export type CollectionBalance = {
+  outstandingBalance: string | null;
+  excessAmount: string | null;
+  collectionStatus: keyof typeof collectionStatusLabel;
+};
+
+export type ProjectBalanceRow = CollectionBalance & {
+  projectId: string; name: string; currency: 'MXN'; agreedAmount: string | null; clientPaidTotal: string;
+};
+
+export type ProjectPaymentData = Pick<CollectionBalance, 'outstandingBalance'> & {
+  agreedPaymentCount: number | null; paymentCount: number;
+};
+
+export type Project = CollectionBalance & ProjectPaymentData & {
   id: string; name: string; client: Client; agreedAmount: string | null; acquisitionSource: string | null;
-  agreedPaymentCount: number | null; paymentCount: number; clientPaidTotal: string; payments: PaymentSummary[];
+  clientPaidTotal: string; payments: PaymentSummary[];
 };
 export type Charge = { id: string; chargeType: string; paidOn: string; amount: string };
 export type Payment = PaymentSummary & {
-  project: Project; client: Client; platformFee: string; withheldTaxAmount: string; receivedAmount: string;
+  version: string; project: Pick<Project, 'id' | 'name'>; client: Client; platformFee: string; withheldTaxAmount: string; receivedAmount: string;
   excessReason: string | null; charges: Charge[]; excessAmount?: string | null;
 };
 

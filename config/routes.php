@@ -5,6 +5,8 @@ declare(strict_types=1);
 use FlowBalance\Finance\Infrastructure\PostgresAccountDataReader;
 use FlowBalance\Finance\Infrastructure\PostgresMonthlyReportReader;
 use FlowBalance\Finance\Http\OwnedResourceHandler;
+use FlowBalance\Finance\Http\PaymentCorrectionHandler;
+use FlowBalance\Finance\Http\ProjectBalanceReportHandler;
 use FlowBalance\Finance\Http\IncomeWriteHandler;
 use FlowBalance\Identity\Application\LoginUser;
 use FlowBalance\Identity\Application\RegisterUser;
@@ -121,6 +123,7 @@ return static function (Application $app): void {
             return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new LogoutHandler());
         },
     ]);
+    $app->get('/api/reports/project-balances', [$transaction, $private, new ProjectBalanceReportHandler()]);
     $app->get('/api/reports/monthly', [$transaction, $private,
         static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
             $parameters = $request->getQueryParams();
@@ -147,9 +150,18 @@ return static function (Application $app): void {
             },
         ]);
     }
+    $correctPayment = static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
+        $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+        return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new PaymentCorrectionHandler());
+    };
+    $app->patch('/api/payments/{id}', [$transaction, $private, $correctPayment], 'payments.patch');
+    $app->delete('/api/payments/{id}', [$transaction, $private, $correctPayment], 'payments.delete');
     foreach (['clients', 'projects', 'payments'] as $type) {
         $handler = new OwnedResourceHandler($type);
         $app->get("/api/{$type}/{id}", [$transaction, $private, $handler], "{$type}.get");
+        if ($type === 'payments') {
+            continue;
+        }
         $app->patch("/api/{$type}/{id}", [$transaction, $private,
             static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($handler) {
                 $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');

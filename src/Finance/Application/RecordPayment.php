@@ -32,7 +32,7 @@ final readonly class RecordPayment
         if ($id !== false) {
             return $id;
         }
-        $query = $this->database->prepare('SELECT id::text, request_fingerprint FROM payments WHERE user_id = ? AND idempotency_key = ?');
+        $query = $this->database->prepare('SELECT id::text, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ?');
         $query->execute([$userId, $key]);
         $existing = $query->fetch(PDO::FETCH_ASSOC);
         if (!$existing) {
@@ -40,6 +40,9 @@ final readonly class RecordPayment
         }
         if (!hash_equals($existing['request_fingerprint'], $fingerprint)) {
             throw new DomainException('La clave ya se usó para otro cobro');
+        }
+        if ($existing['deleted_at'] !== null) {
+            throw new PaymentDeleted();
         }
         return $existing['id'];
     }
@@ -58,11 +61,14 @@ final readonly class RecordPayment
             $projectId, $paidOn, $amounts->clientPaidAmount, $amounts->platformFee,
             $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason,
         ], JSON_THROW_ON_ERROR));
-        $existing = $this->database->prepare('SELECT id::text, request_fingerprint FROM payments WHERE user_id = ? AND idempotency_key = ?');
+        $existing = $this->database->prepare('SELECT id::text, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ? FOR UPDATE');
         $existing->execute([$userId, $key]);
         if ($row = $existing->fetch(PDO::FETCH_ASSOC)) {
             if (!hash_equals($row['request_fingerprint'], $fingerprint)) {
                 throw new DomainException('La clave ya se usó para otro cobro.');
+            }
+            if ($row['deleted_at'] !== null) {
+                throw new PaymentDeleted();
             }
             return ['id' => $row['id'], 'created' => false];
         }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace FlowBalance\Finance\Http;
 
 use DomainException;
+use FlowBalance\Finance\Application\PaymentDeleted;
 use FlowBalance\Finance\Application\CreateClient;
 use FlowBalance\Finance\Application\CreateProject;
 use FlowBalance\Finance\Application\IncomeNotFound;
@@ -47,6 +48,8 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
                 'code' => 'validation_failed', 'message' => $error->getMessage(),
                 'fields' => [$error->field => $error->getMessage()],
             ], ...$error->context], 422);
+        } catch (PaymentDeleted $error) {
+            return new JsonResponse(['error' => ['code' => 'payment_deleted', 'message' => $error->getMessage()]], 409);
         } catch (DomainException $error) {
             return new JsonResponse(['error' => ['code' => 'idempotency_conflict', 'message' => $error->getMessage()]], 409);
         }
@@ -92,13 +95,8 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
         }
         PaymentInput::currency($body['currency'] ?? null);
         $date = PaymentInput::date($body['paidOn'] ?? null);
-        $source = $body['sourceType'] ?? null;
-        if (!in_array($source, ['direct_client', 'platform', 'other'], true)) {
-            throw new IncomeValidation('sourceType', 'Selecciona la fuente del cobro.');
-        }
-        $sourceName = $source === 'direct_client' ? null : PaymentInput::text($body['sourceName'] ?? null, 'sourceName', 100);
-        $reason = $body['excessReason'] ?? null;
-        $reason = $reason === null || (is_string($reason) && trim($reason) === '') ? null : PaymentInput::text($reason, 'excessReason', 250);
+        [$source, $sourceName] = PaymentInput::source($body);
+        $reason = PaymentInput::optionalText($body['excessReason'] ?? null, 'excessReason');
         $result = (new RecordPayment($database))->capture($userId, $projectId, $date, PaymentInput::key($key), $amounts, $source, $sourceName, $reason);
         $detail = (new PostgresOwnedResourceRepository($database))->detail('payments', $userId, $result['id']);
         $created = $result['created'];

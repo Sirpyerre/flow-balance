@@ -12,9 +12,9 @@ final readonly class PaymentAmounts
     public string $withheldTaxAmount;
     public string $receivedAmount;
 
-    public function __construct(mixed $amount, mixed $fee = '0', mixed $tax = '0')
+    public function __construct(mixed $amount, mixed $fee = '0', mixed $tax = '0', bool $allowZeroAmount = false)
     {
-        $this->clientPaidAmount = self::normalize($amount, 'clientPaidAmount');
+        $this->clientPaidAmount = self::normalize($amount, 'clientPaidAmount', $allowZeroAmount);
         $this->platformFee = self::normalize($fee, 'platformFee', true);
         $this->withheldTaxAmount = self::normalize($tax, 'withheldTaxAmount', true);
         $received = self::cents($this->clientPaidAmount) - self::cents($this->platformFee) - self::cents($this->withheldTaxAmount);

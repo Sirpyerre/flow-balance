@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { watchPrivateSession } from '../lib/private-session';
-import { amountLabel, incomeRequest, resourceQuery, sourceLabel, type Client, type Payment, type Project } from '../lib/income-api';
+import { amountLabel, collectionStatusLabel, incomeRequest, resourceQuery, sourceLabel, type Client, type Payment, type Project } from '../lib/income-api';
 import IncomeSetupForm from './IncomeSetupForm';
 import PaymentForm from './PaymentForm';
+import PaymentCorrections from './PaymentCorrections';
 import PaymentChargeForm from './PaymentChargeForm';
 
 type Mode = 'client' | 'project' | 'project-detail' | 'payment' | 'payment-detail';
@@ -70,16 +71,21 @@ export default function IncomePage({ mode }: { mode: Mode }) {
   const params = new URLSearchParams(query);
   const { project, payment } = data ?? {};
   return <>
-    <a href="/dashboard">Volver al tablero</a>
+    {(mode !== 'payment' || !visible) && <a className="income-back" href="/dashboard"><span aria-hidden="true">←</span> Volver al tablero</a>}
     <p id="status" role="status" hidden={visible}>{status || 'Verificando conexión…'}</p>
-    <section className="income-panel" hidden={!visible} key={version}>
+    <section className={mode.endsWith('-detail') ? 'income-panel income-detail-panel' : mode === 'payment' ? 'income-panel payment-entry-panel' : 'income-panel'} hidden={!visible} key={version}>
       {data && (mode === 'client' || mode === 'project') &&
         <IncomeSetupForm mode={mode} clients={data.clients ?? []} selected={params.get('clientId')} fromProject={params.get('from') === 'project'} />}
       {mode === 'project-detail' && project && <ProjectDetail project={project} />}
-      {mode === 'payment' && project && <PaymentForm project={project} />}
+      {mode === 'payment' && project && <PaymentForm key={project.id} project={project} active={visible} />}
       {mode === 'payment-detail' && payment && <>
         <PaymentDetail payment={payment} />
+        <PaymentCorrections key={payment.id} payment={payment} active={visible}
+          onEdited={updated => setData({ payment: updated })} onRefresh={() => location.reload()} />
         <PaymentChargeForm key={revision} paymentId={payment.id} onSaved={charge => {
+          void incomeRequest<Payment>(`/api/payments/${encodeURIComponent(payment.id)}`, { passive: true })
+            .then(updated => setData(current => current?.payment?.id === payment.id && current.payment.version === payment.version ? { payment: updated } : current))
+            .catch(() => {});
           setData({ payment: { ...payment, charges: [...payment.charges.filter(item => item.id !== charge.id), charge]
             .sort((first, second) => first.paidOn.localeCompare(second.paidOn) || (BigInt(first.id) < BigInt(second.id) ? -1 : 1)) } });
           setRevision(value => value + 1);
@@ -91,43 +97,55 @@ export default function IncomePage({ mode }: { mode: Mode }) {
 
 function ProjectDetail({ project }: { project: Project }) {
   return <>
-    <h1>{project.name}</h1>
+    <header className="income-detail-header">
+      <div><h1>{project.name}</h1><span className="income-status">{collectionStatusLabel[project.collectionStatus]}</span></div>
+      <a className="button primary" href={`/payments/new?${resourceQuery('projectId', project.id)}`}>Registrar cobro</a>
+    </header>
     <dl className="income-details">
       <div><dt>Cliente</dt><dd>{project.client.name}</dd></div>
       <div><dt>Origen del proyecto</dt><dd>{project.acquisitionSource ?? 'Sin registrar'}</dd></div>
-      <div><dt>Monto acordado</dt><dd>{project.agreedAmount ? amountLabel(project.agreedAmount) : 'Sin registrar'}</dd></div>
       <div><dt>Avance</dt><dd>{project.agreedPaymentCount === null ? `${project.paymentCount} pagos recibidos · Cantidad acordada: Sin registrar`
         : `${project.paymentCount} de ${project.agreedPaymentCount} pagos recibidos`}</dd></div>
-      <div><dt>Total abonado</dt><dd>{amountLabel(project.clientPaidTotal)}</dd></div>
     </dl>
-    <a className="button primary" href={`/payments/new?${resourceQuery('projectId', project.id)}`}>Registrar cobro</a>
-    <h2>Cobros</h2>
+    <dl className="income-metrics">
+      <div><dt>Monto acordado</dt><dd>{project.agreedAmount ? amountLabel(project.agreedAmount) : 'Sin registrar'}</dd></div>
+      <div><dt>Total abonado</dt><dd>{amountLabel(project.clientPaidTotal)}</dd></div>
+      {project.outstandingBalance !== null && <div className="income-metric-primary"><dt>Saldo pendiente</dt><dd>{amountLabel(project.outstandingBalance)}</dd></div>}
+      {project.collectionStatus === 'overpaid' && project.excessAmount !== null &&
+        <div className="income-metric-primary"><dt>Excedente</dt><dd>{amountLabel(project.excessAmount)}</dd></div>}
+    </dl>
+    <h2 className="income-section-heading">Cobros</h2>
     {project.payments.length === 0 ? <p>Aún no hay cobros.</p> :
-      <ul>{project.payments.map(payment => <li key={payment.id}>
+      <ul className="income-records" role="list">{project.payments.map(payment => <li key={payment.id}>
         <a href={`/payments/view?${resourceQuery('id', payment.id)}`}>{payment.paidOn} · {amountLabel(payment.clientPaidAmount)}</a>
-        <div>{sourceLabel(payment, project.client.name)}</div>
+        <span>{sourceLabel(payment, project.client.name)}</span>
       </li>)}</ul>}
   </>;
 }
 
 function PaymentDetail({ payment }: { payment: Payment }) {
   return <>
-    <h1>Detalle del cobro</h1>
-    <a href={`/projects/view?${resourceQuery('id', payment.project.id)}`}>{payment.project.name}</a>
+    <header className="income-detail-header">
+      <div><h1>Detalle del cobro</h1>
+        <a href={`/projects/view?${resourceQuery('id', payment.project.id)}`}>{payment.project.name}</a>
+      </div>
+    </header>
     <dl className="income-details">
       <div><dt>Cliente</dt><dd>{payment.client.name}</dd></div>
       <div><dt>Fecha de pago</dt><dd>{payment.paidOn}</dd></div>
       <div><dt>Fuente</dt><dd>{sourceLabel(payment, payment.client.name)}</dd></div>
+    </dl>
+    <dl className="income-metrics">
       <div><dt>Importe abonado</dt><dd>{amountLabel(payment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'))}</dd></div>
       <div><dt>Comisión de plataforma</dt><dd>{amountLabel(payment.platformFee)}</dd></div>
       <div><dt>Impuestos descontados</dt><dd>{amountLabel(payment.withheldTaxAmount)}</dd></div>
-      <div><dt>Dinero recibido al cobrar</dt><dd>{amountLabel(payment.receivedAmount)}</dd></div>
-      {payment.excessReason && <div><dt>Razón del excedente</dt><dd>{payment.excessReason}</dd></div>}
+      <div className="income-metric-primary"><dt>Dinero recibido al cobrar</dt><dd>{amountLabel(payment.receivedAmount)}</dd></div>
     </dl>
-    <h2>Cargos pagados por separado</h2>
+    {payment.excessReason && <dl className="income-details"><div><dt>Razón del excedente</dt><dd>{payment.excessReason}</dd></div></dl>}
+    <h2 className="income-section-heading">Cargos pagados por separado</h2>
     {payment.charges.length === 0 ? <p>Aún no hay cargos.</p> :
-      <ul>{payment.charges.map(charge => <li key={charge.id}>
-        {charge.chargeType === 'commission' ? 'Comisión' : 'Impuesto'} · {charge.paidOn} · {amountLabel(charge.amount)}
+      <ul className="income-records" role="list">{payment.charges.map(charge => <li key={charge.id}>
+        <span>{charge.chargeType === 'commission' ? 'Comisión' : 'Impuesto'} · {charge.paidOn} · <strong>{amountLabel(charge.amount)}</strong></span>
       </li>)}</ul>}
   </>;
 }

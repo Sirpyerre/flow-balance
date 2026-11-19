@@ -17,7 +17,7 @@ Los identificadores `[P]` indican trabajo que puede ejecutarse en paralelo despu
 
 ## Fase 2 — Fundamentos
 
-- [ ] T002 [P] Preparar en `tests/Integration/IncomeMigrationTest.php` casos de migración desde filas históricas, segunda aplicación sin cambios, reversión y reaplicación en vacío, rechazo de titulares inconsistentes en cargos y bloqueo de reversión con origen, conteo acordado, razón o cargos capturados.
+- [x] T002 [P] Preparar en `tests/Integration/IncomeMigrationTest.php` casos de migración desde filas históricas, segunda aplicación sin cambios, reversión y reaplicación en vacío, rechazo de titulares inconsistentes en cargos y bloqueo de reversión con origen, conteo acordado, razón o cargos capturados.
 - [x] T003 [P] Definir en `tests/Unit/PaymentAmountsTest.php` casos de 14 dígitos, exceso de precisión, MXN 0.30 menos MXN 0.10 y MXN 0.20, deducciones omitidas o negativas y recibido de MXN 2,800.00.
 - [x] T004 Implementar migraciones Phinx aditivas en `db/migrations/20261118000600_extend_income_projects.php`, `db/migrations/20261118000700_extend_income_payments.php` y `db/migrations/20261118000800_create_payment_charges.php`. Añadir monto y moneda acordados, origen, conteo acordado, fuente, deducciones y razón. Crear cargos con FK compuesta a `payments(user_id,id)` e idempotencia por cuenta, preservando filas y huellas históricas. Bloquear la reversión que descartaría datos y ejecutar T002.
 - [x] T005 Implementar normalización y cálculo exacto en `src/Finance/Application/PaymentAmounts.php`, reutilizando la regla de `src/Finance/Application/ClientPaidAmount.php` y diferenciando montos positivos de deducciones no negativas. Producir cadenas de dos decimales y ejecutar T003.
@@ -27,8 +27,8 @@ Los identificadores `[P]` indican trabajo que puede ejecutarse en paralelo despu
 
 **Prueba independiente.** Desde una cuenta vacía, crear «Estudio Norte» y «Identidad visual» con MXN 5,000.00, origen «Recomendación» y tres pagos acordados. Ver «0 de 3 pagos recibidos» y seleccionar el mismo cliente para un segundo proyecto.
 
-- [ ] T007 [P] [US1] Preparar en `tests/Integration/AccountAccessTest.php` pruebas de contrato para POST de clientes y proyectos y GET de proyecto. Cubrir nombres recortados, monto acordado en MXN, rechazo de USD, origen, conteo acordado positivo entero, históricos, sesión, CSRF y cliente ajeno o inexistente con respuesta idéntica.
-- [ ] T008 [P] [US1] Preparar en `frontend/tests/income.spec.ts` el recorrido desde tablero vacío, el alta de cliente, el retorno con cliente seleccionado, la reutilización del cliente y el detalle inicial con origen y «0 de 3 pagos recibidos».
+- [x] T007 [P] [US1] Preparar en `tests/Integration/AccountAccessTest.php` pruebas de contrato para POST de clientes y proyectos y GET de proyecto. Cubrir nombres recortados, monto acordado en MXN, rechazo de USD, origen, conteo acordado positivo entero, históricos, sesión, CSRF y cliente ajeno o inexistente con respuesta idéntica.
+- [x] T008 [P] [US1] Preparar en `frontend/tests/income.spec.ts` el recorrido desde tablero vacío, el alta de cliente, el retorno con cliente seleccionado, la reutilización del cliente y el detalle inicial con origen y «0 de 3 pagos recibidos».
 - [x] T009 [US1] Extender `src/Finance/Application/CreateProject.php` para validar y guardar monto positivo en MXN, origen y cantidad acordada de pagos y preservar los llamadores anteriores, y reutilizar `src/Finance/Application/CreateClient.php`. Preparar en `src/Finance/Infrastructure/PostgresOwnedResourceRepository.php` la lectura de detalle por cuenta con datos históricos nulos, conteo real y suma decimal de pagos.
 - [x] T010 [US1] Añadir POST protegidos y ampliar GET de proyecto en `config/routes.php` y emplear `src/Finance/Http/OwnedResourceHandler.php` para las lecturas existentes. Aplicar la semántica del contrato de `specs/002-register-income/contracts/income.md` y ejecutar T007.
 - [x] T011 [US1] Implementar alta y selección en `frontend/src/pages/clients/new.astro`, `frontend/src/pages/projects/new.astro` y `frontend/src/components/IncomeSetupForm.tsx`. Integrar accesos desde `frontend/src/pages/dashboard.astro` y detalle en `frontend/src/pages/projects/view.astro`. Capturar y mostrar origen, monto acordado y avance. Mostrar «Sin registrar» para los datos históricos ausentes. Ejecutar T008.
@@ -78,7 +78,7 @@ Los identificadores `[P]` indican trabajo que puede ejecutarse en paralelo despu
 - [x] T032 Documentar en `docs/local-development.md` las nuevas rutas privadas, cabeceras no-store y política sin caché, y en `specs/002-register-income/quickstart.md` el procedimiento verificable para respaldar y recuperar los datos antes de una reversión que pudiera descartarlos.
 - [ ] T033 Ejecutar la guía de `specs/002-register-income/quickstart.md` en base independiente con migraciones, PHPUnit, Playwright y PWA bajo HTTPS. Registrar resultados y cualquier caso pendiente en `docs/validation/register-income.md`. Comprobar regresión de acceso por cuenta y conformidad con los criterios de revisión.
 
-Las tareas abiertas de pruebas conservan los escenarios aún pendientes. Consulta los [resultados de validación](../../docs/validation/register-income.md).
+En T029 se verificaron la consulta a ancho de escritorio, los enlaces, la desconexión y la recarga. El cambio de cuenta quedó diferido por decisión del usuario. Las tareas abiertas de pruebas conservan los escenarios aún pendientes. Consulta los [resultados de validación](../../docs/validation/register-income.md).
 
 ## Dependencias y ejecución
 

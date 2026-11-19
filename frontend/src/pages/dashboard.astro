@@ -29,22 +29,43 @@ import AppLayout from '../layouts/AppLayout.astro';
       <p id="report-empty" class="empty" hidden>No hay cobros en este mes.</p>
     </section>
 
+    <section class="panel" aria-labelledby="project-balances-title">
+      <div class="report-heading balance-heading">
+        <h2 id="project-balances-title">Saldos vigentes por proyecto</h2>
+        <div class="month-field balance-filter" hidden>
+          <label for="balance-filter">Mostrar proyectos</label>
+          <select id="balance-filter">
+            <option value="outstanding">Pendientes</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+      <p id="balance-status" class="empty" role="status"></p>
+      <button id="balance-retry" class="button" type="button" hidden>Reintentar</button>
+      <ul id="project-balances" class="balance-list"></ul>
+      <a id="balance-create" href="/projects/new" hidden>Nuevo proyecto</a>
+    </section>
+
     <div class="collections">
       <section class="panel" aria-labelledby="clients-title">
-        <h2 id="clients-title">Clientes</h2>
-        <a href="/clients/new">Nuevo cliente</a>
-        <ul id="clients" class="records"></ul>
+        <div class="collection-heading">
+          <h2 id="clients-title">Clientes</h2>
+          <a class="button" href="/clients/new">Nuevo cliente</a>
+        </div>
+        <ul id="clients" class="records collection-records" role="list"></ul>
         <p class="empty">Aún no tienes clientes.</p>
       </section>
       <section class="panel" aria-labelledby="projects-title">
-        <h2 id="projects-title">Proyectos</h2>
-        <a href="/projects/new">Nuevo proyecto</a>
-        <ul id="projects" class="records"></ul>
+        <div class="collection-heading">
+          <h2 id="projects-title">Proyectos</h2>
+          <a class="button" href="/projects/new">Nuevo proyecto</a>
+        </div>
+        <ul id="projects" class="records collection-records" role="list"></ul>
         <p class="empty">Aún no tienes proyectos.</p>
       </section>
       <section class="panel" aria-labelledby="payments-title">
         <h2 id="payments-title">Cobros guardados</h2>
-        <ul id="payments" class="records"></ul>
+        <ul id="payments" class="records collection-records" role="list"></ul>
         <p class="empty">Aún no tienes cobros.</p>
       </section>
     </div>
@@ -76,8 +97,61 @@ import AppLayout from '../layouts/AppLayout.astro';
   }
   .summary { background: linear-gradient(110deg, #211837, var(--surface) 72%); }
   .amount { margin-top: 12px; font-size: clamp(20px, 4vw, 30px); font-weight: 700; overflow-wrap: anywhere; }
+  .balance-heading { align-items: end; }
+  .balance-filter select {
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 10px;
+    background: var(--base);
+    color: var(--text);
+    color-scheme: dark;
+    font: inherit;
+  }
+  .balance-filter select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .balance-list {
+    display: grid;
+    gap: 12px;
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+  }
+  .balance-list:empty { display: none; }
+  .balance-list :global(.balance-row) {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--base);
+    overflow-wrap: anywhere;
+  }
+  .balance-list :global(.balance-row-heading) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 14px;
+    font-weight: 700;
+  }
+  .balance-list :global(.balance-state) { color: var(--muted); font-size: .875rem; }
+  .balance-list :global(.balance-amounts) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+    gap: 10px;
+    margin: 12px 0 0;
+  }
+  .balance-list :global(.balance-amounts dt) { color: var(--muted); font-size: .8125rem; }
+  .balance-list :global(.balance-amounts dd) { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .balance-list :global(.balance-emphasis) { font-weight: 700; }
+  #balance-retry, #balance-create { margin-top: 10px; }
   .month-field { display: grid; gap: 10px; width: min(100%, 230px); }
   .collections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .collection-heading { display: grid; gap: 10px; justify-items: start; }
+  .collection-heading .button { padding: 6px 10px; }
+  .records.collection-records { list-style: none; padding: 0; }
+  .collection-records :global(li) { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .collection-records :global(li:last-child) { border-bottom: 0; padding-bottom: 0; }
+  .collection-records :global(a) { text-decoration-thickness: 1px; text-underline-offset: 3px; }
   .records { margin: 12px 0 0; padding-inline-start: 20px; overflow-wrap: anywhere; }
   .records:empty, .records:not(:empty) + .empty { display: none; }
   .empty { color: var(--muted); font-size: 14px; margin-top: 10px; }
@@ -87,6 +161,7 @@ import AppLayout from '../layouts/AppLayout.astro';
   }
 </style>
 <script>
+  import { amountLabel, collectionStatusLabel, resourceQuery, type ProjectBalanceRow } from '../lib/income-api';
   import { watchPrivateSession } from '../lib/private-session';
   const logout = document.querySelector<HTMLButtonElement>('#logout')!;
   const logoutError = document.querySelector<HTMLElement>('#logout-error')!;
@@ -100,6 +175,102 @@ import AppLayout from '../layouts/AppLayout.astro';
   const reportEmpty = document.querySelector<HTMLElement>('#report-empty')!;
   const reportPayments = document.querySelector<HTMLElement>('#report-payments')!;
   const lists = ['clients', 'projects', 'payments'].map((id) => document.getElementById(id)!);
+  const balanceFilter = document.querySelector<HTMLSelectElement>('#balance-filter')!;
+  const balanceFilterField = balanceFilter.closest<HTMLElement>('.balance-filter')!;
+  const balanceStatus = document.querySelector<HTMLElement>('#balance-status')!;
+  const balanceList = document.querySelector<HTMLElement>('#project-balances')!;
+  const balanceRetry = document.querySelector<HTMLButtonElement>('#balance-retry')!;
+  const balanceCreate = document.querySelector<HTMLAnchorElement>('#balance-create')!;
+  let balanceRequest: AbortController | undefined;
+  let balanceRows: ProjectBalanceRow[] = [];
+
+  function renderBalances() {
+    const rows = balanceFilter.value === 'all'
+      ? balanceRows : balanceRows.filter(row => row.collectionStatus === 'outstanding');
+    balanceCreate.hidden = balanceRows.length !== 0;
+    balanceStatus.textContent = balanceRows.length === 0 ? 'Aún no tienes proyectos'
+      : rows.length === 0 ? 'No tienes proyectos con saldo pendiente' : '';
+    balanceList.replaceChildren(...rows.map(row => {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = `/projects/view?${resourceQuery('id', row.projectId)}`;
+      link.textContent = row.name;
+      item.className = 'balance-row';
+      const heading = document.createElement('div');
+      heading.className = 'balance-row-heading';
+      const state = document.createElement('span');
+      state.className = 'balance-state';
+      state.textContent = collectionStatusLabel[row.collectionStatus];
+      heading.append(link, state);
+
+      const amounts = document.createElement('dl');
+      amounts.className = 'balance-amounts';
+      const metrics = [
+        ['Monto acordado', row.agreedAmount === null ? 'Sin registrar' : amountLabel(row.agreedAmount)],
+        ['Total abonado', amountLabel(row.clientPaidTotal)],
+      ];
+      if (row.outstandingBalance !== null) metrics.push(['Saldo pendiente', amountLabel(row.outstandingBalance)]);
+      if (row.collectionStatus === 'overpaid' && row.excessAmount !== null) metrics.push(['Excedente', amountLabel(row.excessAmount)]);
+      for (const [label, value] of metrics) {
+        const metric = document.createElement('div');
+        const term = document.createElement('dt');
+        const amount = document.createElement('dd');
+        term.textContent = label;
+        amount.textContent = value;
+        if (label === 'Saldo pendiente' || label === 'Excedente') amount.className = 'balance-emphasis';
+        metric.append(term, amount);
+        amounts.append(metric);
+      }
+      item.append(heading, amounts);
+      return item;
+    }));
+  }
+
+  function clearBalances() {
+    balanceRequest?.abort();
+    balanceRequest = undefined;
+    balanceRows = [];
+    balanceList.replaceChildren();
+    balanceFilterField.hidden = true;
+    balanceFilter.value = 'outstanding';
+    balanceRetry.hidden = true;
+    balanceCreate.hidden = true;
+    balanceStatus.textContent = '';
+  }
+
+  async function loadBalances() {
+    clearBalances();
+    const current = new AbortController();
+    balanceRequest = current;
+    const isCurrent = () => balanceRequest === current && !current.signal.aborted && !account.hidden;
+    balanceStatus.textContent = 'Cargando saldos…';
+    try {
+      const response = await fetch('/api/reports/project-balances', {
+        signal: current.signal, cache: 'no-store', headers: { 'X-Session-Activity': 'passive' },
+      });
+      if (!isCurrent()) return;
+      if (response.status === 401) {
+        clear();
+        location.replace('/login');
+        return;
+      }
+      if (!response.ok) throw new Error();
+      const data: { projects: ProjectBalanceRow[] } = await response.json();
+      if (!isCurrent()) return;
+      session.updateDeadline(response);
+      balanceRows = data.projects;
+      balanceFilterField.hidden = balanceRows.length === 0;
+      renderBalances();
+    } catch {
+      if (!isCurrent()) return;
+      balanceStatus.textContent = 'No se pudieron cargar los saldos.';
+      balanceRetry.hidden = false;
+    }
+  }
+
+  balanceFilter.addEventListener('change', renderBalances);
+  balanceRetry.addEventListener('click', () => void loadBalances());
+
   let reportRequest: AbortController | undefined;
   function renderList(list: HTMLElement, items: (string | { text: string; href: string })[]) {
     list.replaceChildren(...items.map((text) => {
@@ -165,6 +336,7 @@ import AppLayout from '../layouts/AppLayout.astro';
       void report(true);
       session.updateDeadline(response);
       account.hidden = false;
+      void loadBalances();
       logout.hidden = false;
     } catch {
       if (!current.signal.aborted) status.textContent = 'No se pudo cargar el tablero.';
@@ -172,6 +344,7 @@ import AppLayout from '../layouts/AppLayout.astro';
   }
   function clear() {
     request?.abort();
+    clearBalances();
     account.hidden = true;
     logout.hidden = true;
     firstProject.hidden = true;

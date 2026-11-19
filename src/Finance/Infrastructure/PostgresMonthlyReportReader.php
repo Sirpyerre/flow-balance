@@ -19,7 +19,7 @@ final readonly class PostgresMonthlyReportReader
                        'currency', currency, 'paidOn', paid_on
                    ) ORDER BY id), '[]'::json)::text AS payments
             FROM payments
-            WHERE user_id = ? AND currency = ?
+            WHERE user_id = ? AND currency = ? AND deleted_at IS NULL
               AND paid_on >= CAST(? AS date)
               AND paid_on < CAST(? AS date) + INTERVAL '1 month'
             SQL);

@@ -97,3 +97,160 @@ input[aria-invalid=true] { border-color: var(--rose); }
 .income-details { display: grid; gap: 0.75rem; }
 .income-details dt { color: var(--muted); }
 .income-details dd { margin: 0.2rem 0 0; }
+
+.income-back { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; text-underline-offset: 3px; }
+.income-detail-panel { width: 100%; }
+.income-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.income-detail-header h1 { margin: 0 0 .5rem; font-size: clamp(1.55rem, 4vw, 2rem); line-height: 1.2; }
+.income-detail-header .button { min-height: 44px; }
+.income-status {
+  display: inline-block;
+  padding: .3rem .65rem;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--base);
+  color: var(--label);
+  font-size: .8125rem;
+}
+.income-detail-panel .income-details,
+.income-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.75rem), 1fr));
+  gap: .75rem;
+  margin: 1.25rem 0;
+}
+.income-detail-panel dt { color: var(--label); font-size: .875rem; }
+.income-metrics { display: grid; }
+.income-metrics > div {
+  padding: .875rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--base);
+}
+.income-metrics dd { margin: .4rem 0 0; font-size: 1.0625rem; font-variant-numeric: tabular-nums; }
+.income-metrics .income-metric-primary { border-color: var(--input-border); background: #211837; }
+.income-metric-primary dd { font-weight: 700; }
+.income-section-heading { margin: 1.5rem 0 .75rem; font-size: 1.2rem; }
+.income-records { list-style: none; margin: 0; padding: 0; }
+.income-records li { display: grid; gap: .35rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.income-records li:first-child { border-top: 1px solid var(--border); }
+.income-records span { color: var(--label); font-size: .875rem; }
+.income-records a { justify-self: start; text-underline-offset: 3px; }
+.income-records strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.income-charge-form { margin-top: 1rem; padding: 0 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--base); }
+.income-charge-form summary { padding: .875rem 0; font-weight: 600; }
+.income-charge-form[open] summary { border-bottom: 1px solid var(--border); }
+.income-charge-form button { justify-self: start; min-height: 44px; }
+@media (max-width: 420px) {
+  .income-detail-header > .button, .income-charge-form button { width: 100%; }
+}
+
+.payment-corrections { margin-block: 1rem; }
+.correction-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.payment-corrections fieldset { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.payment-corrections dialog { width: min(calc(100% - 2rem), 30rem); border: 1px solid var(--input-border); border-radius: 16px; padding: 1.25rem; color: var(--text); background: var(--surface); }
+.payment-corrections dialog::backdrop { background: rgb(0 0 0 / 65%); }
+
+.project-payment-summary {
+  padding: 1rem;
+  border: 1px solid var(--input-border);
+  border-radius: .75rem;
+  background: var(--base);
+  margin-block-end: 1rem;
+}
+
+.project-payment-summary h2 {
+  font-size: 1rem;
+  margin: 0 0 .5rem;
+}
+
+.project-payment-summary p {
+  margin: .25rem 0;
+}
+
+.project-payment-projection {
+  border-block-start: 1px solid var(--input-border);
+  margin-block-start: .65rem;
+  padding-block-start: .5rem;
+}
+
+.payment-entry-form > fieldset {
+  display: grid;
+  gap: inherit;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.payment-entry-panel {
+  width: min(100%, 40.5rem);
+  margin-inline: auto;
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+
+.payment-entry-header h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
+.payment-entry-header p { margin: .125rem 0 0; color: var(--muted); font-size: .875rem; }
+
+.income-panel .payment-entry-form { gap: 1rem; margin: .875rem 0 0; }
+.payment-entry-form > fieldset { gap: .75rem; }
+.payment-entry-source { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.payment-entry-amounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.payment-entry-source > :nth-child(n+3),
+.payment-entry-amounts > :nth-child(n+4) { grid-column: 1 / -1; }
+.payment-entry-form label { gap: .375rem; }
+.payment-entry-form :is(input, select) { height: 2.75rem; min-height: 2.75rem; }
+.payment-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .625rem; }
+.payment-entry-actions > * { min-height: 44px; }
+
+.payment-summary-compact { margin: 0; }
+.payment-summary-accessible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.payment-summary-metrics { display: flex; justify-content: space-between; gap: .75rem; }
+.payment-summary-metrics > :last-child { text-align: right; }
+.payment-summary-label {
+  display: block;
+  color: var(--muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+.payment-summary-metrics strong {
+  display: block;
+  padding-top: .125rem;
+  font-size: clamp(1rem, 4vw, 1.375rem);
+  font-variant-numeric: tabular-nums;
+}
+.payment-summary-metrics strong span { color: var(--muted); }
+.payment-summary-track {
+  display: flex;
+  gap: .25rem;
+  height: .375rem;
+  margin-block: .625rem .5rem;
+  border-radius: 999px;
+  background: var(--base);
+}
+.payment-summary-track:has(> :only-child) { background: var(--input-border); }
+.payment-summary-track span { flex: 1; min-width: 0; border-radius: inherit; background: var(--input-border); }
+.payment-summary-track .is-filled { background: var(--gradient); }
+.payment-summary-compact .payment-summary-next { color: var(--link); font-size: .8125rem; margin-bottom: 0; }
+.payment-summary-note { color: var(--muted); font-size: .8125rem; }
+
+@media (max-width: 540px) {
+  .payment-entry-source { grid-template-columns: minmax(0, 1fr); }
+  .payment-entry-amounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-entry-amounts > :first-child { grid-column: 1 / -1; }
+  .payment-entry-actions > * { flex: 1; }
+}

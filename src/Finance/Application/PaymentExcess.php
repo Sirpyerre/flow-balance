@@ -22,7 +22,7 @@ final readonly class PaymentExcess
         $query = $this->database->prepare('WITH projected AS (
             SELECT round(COALESCE(SUM(client_paid_amount), 0) + CAST(? AS numeric), 2) AS total
             FROM payments WHERE user_id = ? AND project_id = ? AND currency = \'MXN\'
-            AND id IS DISTINCT FROM CAST(? AS bigint)
+            AND deleted_at IS NULL AND id IS DISTINCT FROM CAST(? AS bigint)
         ) SELECT total::text, CASE WHEN CAST(? AS numeric) IS NULL THEN NULL
             ELSE GREATEST(total - CAST(? AS numeric), 0.00)::text END AS excess FROM projected');
         $query->execute([$amount, $userId, $projectId, $replaceId, $agreedAmount, $agreedAmount]);

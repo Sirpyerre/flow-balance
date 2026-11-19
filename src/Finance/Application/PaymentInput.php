@@ -38,6 +38,23 @@ final class PaymentInput
         return $value;
     }
 
+    public static function source(array $body, bool $allowHistorical = false): array
+    {
+        $source = $body['sourceType'] ?? null;
+        if ($source === null && $allowHistorical && array_key_exists('sourceType', $body)) {
+            return [null, null];
+        }
+        if (!in_array($source, ['direct_client', 'platform', 'other'], true)) {
+            throw new IncomeValidation('sourceType', 'Selecciona la fuente del cobro.');
+        }
+        return [$source, $source === 'direct_client' ? null : self::text($body['sourceName'] ?? null, 'sourceName', 100)];
+    }
+
+    public static function optionalText(mixed $value, string $field): ?string
+    {
+        return $value === null || (is_string($value) && trim($value) === '') ? null : self::text($value, $field, 250);
+    }
+
     public static function key(string $key): string
     {
         $key = trim($key);

@@ -1,0 +1,8 @@
+# Validación de Saldos pendientes por proyecto
+
+- La línea base de Registro de ingresos pasó con 12 pruebas PHP y 3 de navegador. Phinx confirmó el esquema al día en `flow_balance_test`. Saldos deriva los importes al consultar y usa las tablas existentes.
+- Una consulta de solo lectura en la base local encontró cero abonos en MXN con fracciones de centavo. La prueba de integración sembró dos abonos de MXN 0.015 y comprobó que el desglose muestra MXN 0.02 por abono, que el detalle y el reporte de saldos suman MXN 0.04 y que el dato almacenado y el cálculo mensual se conservan.
+- PHPUnit pasó 20 pruebas con 254 aserciones. La regla cubre los cuatro estados y acumulados mayores que un entero nativo. La integración verificó el aislamiento de dos cuentas, el 404 uniforme, la sesión y las cabeceras del reporte, la igualdad de saldos entre detalle y reporte, y la coherencia entre importe y desglose antes y después de confirmar un abono desde otra conexión.
+- Astro compiló las nueve páginas. Playwright pasó las seis pruebas en Chrome sobre el build servido por HTTPS. A 360 px se verificaron el recorrido desde el tablero al cobro, los filtros, los mensajes vacíos, el cambio de mes, el error recuperable y la recarga sin conexión. Se simuló además una respuesta tardía que llega después de ocultar el tablero y se comprobó que queda descartada. La presentación del proyecto histórico se probó con una respuesta de API simulada en Chrome y con datos históricos reales en la base de integración.
+
+La validación en un Android físico y el cambio de cuenta con un cobro abierto permanecen diferidos según las decisiones anteriores.

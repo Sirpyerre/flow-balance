@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace FlowBalance\Finance\Http;
 
 use FlowBalance\Finance\Application\OwnedResourceChanges;
-use FlowBalance\Finance\Application\PaymentAmounts;
-use FlowBalance\Finance\Application\PaymentExcess;
 use FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository;
 use InvalidArgumentException;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -28,7 +26,7 @@ final readonly class OwnedResourceHandler implements RequestHandlerInterface
         $repository = new PostgresOwnedResourceRepository($database);
         $writing = $request->getMethod() === 'PATCH';
         $resource = OwnedResourceChanges::identifier($id)
-            ? ($writing ? $repository->find($this->type, $userId, $id, $this->type !== 'payments')
+            ? ($writing ? $repository->find($this->type, $userId, $id, true)
                 : $repository->detail($this->type, $userId, $id))
             : null;
         if ($resource === null) {
@@ -39,17 +37,6 @@ final readonly class OwnedResourceHandler implements RequestHandlerInterface
         }
         try {
             $changes = (new OwnedResourceChanges())->validate($this->type, (array) $request->getParsedBody());
-            if ($this->type === 'payments') {
-                $excess = new PaymentExcess($database);
-                $project = $excess->project($userId, $resource['projectId'], true);
-                $resource = $repository->find('payments', $userId, $id, true);
-                $amount = $changes['clientPaidAmount'];
-                new PaymentAmounts($amount, $resource['platformFee'], $resource['withheldTaxAmount']);
-                $increased = (int) str_replace('.', '', $amount) > (int) str_replace('.', '', $resource['clientPaidAmount']);
-                if ($increased && $excess->calculate($userId, $resource['projectId'], $project['agreed_amount'], $amount, $id)['requiresExcessReason']) {
-                    throw new InvalidArgumentException('El cambio aumentaría el excedente del proyecto.');
-                }
-            }
             if (isset($changes['clientId']) && $changes['clientId'] !== $resource['clientId'] && $repository->hasPayments($userId, $id)) {
                 return new JsonResponse(['error' => ['code' => 'project_has_payments', 'message' => 'No se puede cambiar el cliente de un proyecto con cobros.']], 409);
             }

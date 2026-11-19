@@ -39,6 +39,34 @@ final class IncomeMigrationTest extends TestCase
             foreach ([$projects, $payments, $charges] as $item) {
                 $item->up();
             }
+            $corrections = $migration('AddPaymentCorrections', '20261119000100_add_payment_corrections');
+            $corrections->up();
+            self::assertSame('1', $database->query('SELECT version::text FROM payments')->fetchColumn());
+            self::assertNull($database->query('SELECT deleted_at FROM payments')->fetchColumn());
+            $corrections->down();
+            $corrections->up();
+            $revision = "INSERT INTO payment_revisions
+                (user_id, payment_id, actor_id, previous_version, result_version, action, previous_values, request_key, fingerprint)
+                VALUES (?,1,?, ?, ?, 'edit','{}','request',repeat('a',64))";
+            $database->prepare($revision)->execute([1, 1, 1, 2]);
+            foreach ([[2, 2, '23503'], [1, 1, '23505']] as [$owner, $actor, $code]) {
+                $database->exec('SAVEPOINT correction_constraint');
+                try {
+                    $database->prepare($revision)->execute([$owner, $actor, 2, 3]);
+                    self::fail('Expected a correction constraint');
+                } catch (PDOException $error) {
+                    self::assertSame($code, $error->getCode());
+                    $database->exec('ROLLBACK TO SAVEPOINT correction_constraint');
+                }
+            }
+            try {
+                $corrections->down();
+                self::fail('Expected the correction rollback guard');
+            } catch (RuntimeException $error) {
+                self::assertStringContainsString('Preserve payment corrections', $error->getMessage());
+            }
+            $database->exec('DELETE FROM payment_revisions');
+            $corrections->down();
             self::assertNull($database->query('SELECT agreed_amount FROM projects')->fetchColumn());
             self::assertSame('3000.000000', $database->query('SELECT client_paid_amount::text FROM payments')->fetchColumn());
             self::assertSame('0', $database->query('SELECT platform_fee::text FROM payments')->fetchColumn());
@@ -57,6 +85,23 @@ final class IncomeMigrationTest extends TestCase
             } catch (PDOException $e) {
                 self::assertSame('23503', $e->getCode());
                 $database->exec('ROLLBACK TO SAVEPOINT foreign_owner');
+            }
+            foreach ([
+                [$projects, "UPDATE projects SET acquisition_source = 'Recomendación'", 'Preserve project income data'],
+                [$projects, 'UPDATE projects SET agreed_payment_count = 3', 'Preserve project income data'],
+                [$payments, "UPDATE payments SET excess_reason = 'Trabajo adicional'", 'Preserve payment income data'],
+            ] as [$item, $statement, $message]) {
+                $database->exec('SAVEPOINT rollback_guard');
+                $database->exec($statement);
+                try {
+                    $item->down();
+                    self::fail('Expected a guard against data loss');
+                } catch (RuntimeException $error) {
+                    self::assertStringContainsString($message, $error->getMessage());
+                } finally {
+                    $database->exec('ROLLBACK TO SAVEPOINT rollback_guard');
+                    $database->exec('RELEASE SAVEPOINT rollback_guard');
+                }
             }
             $database->exec("INSERT INTO payment_charges (user_id,payment_id,charge_type,paid_on,amount,currency,idempotency_key,request_fingerprint)
                     VALUES (1,1,'commission','2025-12-02',50,'MXN','charge',repeat('b',64))");

@@ -12,7 +12,7 @@ final readonly class RecordPaymentCharge
 
     public function record(string $userId, string $paymentId, string $key, string $type, string $date, string $amount): array
     {
-        $owner = $this->database->prepare('SELECT 1 FROM payments WHERE user_id = ? AND id = ?');
+        $owner = $this->database->prepare('SELECT 1 FROM payments WHERE user_id = ? AND id = ? AND deleted_at IS NULL FOR UPDATE');
         $owner->execute([$userId, $paymentId]);
         if (!$owner->fetchColumn()) {
             throw new IncomeNotFound();
@@ -24,6 +24,8 @@ final readonly class RecordPaymentCharge
             VALUES (?, ?, ?, ?, ?, ?, ?, 'MXN') ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING {$projection}");
         $query->execute([$userId, $paymentId, $key, $fingerprint, $type, $date, $amount]);
         if ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $version = $this->database->prepare('UPDATE payments SET version = version + 1 WHERE user_id = ? AND id = ?');
+            $version->execute([$userId, $paymentId]);
             return [$row, true];
         }
         $query = $this->database->prepare("SELECT {$projection}, request_fingerprint FROM payment_charges WHERE user_id = ? AND idempotency_key = ?");

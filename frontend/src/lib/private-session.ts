@@ -1,13 +1,16 @@
-export function watchPrivateSession(clear: () => void, show: () => void) {
+export function watchPrivateSession(clear: () => void, show: () => void, reset: () => void = clear) {
   const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('flow-balance-session');
   let deadline = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: AbortController | undefined;
+  let userId: string | undefined;
+  const listeners = new AbortController();
+  const options = { signal: listeners.signal };
 
   function leave() {
     pending?.abort();
     clearTimeout(timer);
-    clear();
+    reset();
     location.replace('/login');
   }
 
@@ -32,8 +35,10 @@ export function watchPrivateSession(clear: () => void, show: () => void) {
       if (request.signal.aborted) return;
       if (response.status === 401) return leave();
       if (!response.ok) throw new Error();
-      const { session } = await response.json();
+      const { session, user } = await response.json();
       if (request.signal.aborted) return;
+      if (userId !== undefined && userId !== user?.id) reset();
+      userId = user?.id;
       schedule(Math.min(Date.parse(session.idleExpiresAt), Date.parse(session.absoluteExpiresAt)));
       show();
     } catch {
@@ -46,17 +51,24 @@ export function watchPrivateSession(clear: () => void, show: () => void) {
 
   channel?.addEventListener('message', (event) => {
     if (event.data === 'logged-out') leave();
-  });
-  addEventListener('pagehide', () => { pending?.abort(); clear(); });
-  addEventListener('pageshow', verify);
-  addEventListener('online', verify);
-  addEventListener('offline', () => { pending?.abort(); clear(); });
+  }, options);
+  addEventListener('pagehide', () => { pending?.abort(); clear(); }, options);
+  addEventListener('pageshow', verify, options);
+  addEventListener('online', verify, options);
+  addEventListener('offline', () => {
+    pending?.abort();
+    clear();
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'Sin conexión. Vuelve a conectarte para continuar.';
+  }, options);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { pending?.abort(); clear(); }
     else void verify();
-  });
+  }, options);
 
   return {
+    verify,
+    dispose() { listeners.abort(); pending?.abort(); clearTimeout(timer); channel?.close(); },
     updateDeadline,
     logoutConfirmed() { channel?.postMessage('logged-out'); leave(); },
   };

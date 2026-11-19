@@ -1,0 +1,107 @@
+import { randomUUID } from 'node:crypto';
+import { expect, test } from '@playwright/test';
+
+test('registers a project, records income and charges, and opens the monthly report on mobile', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL ?? 'https://flow-balance.test').origin;
+  await page.goto('/register');
+  await page.getByLabel('Nombre', { exact: true }).fill('Cuenta de prueba de ingresos');
+  await page.getByLabel('Correo electrónico').fill(`income-${randomUUID()}@example.test`);
+  await page.getByLabel('Contraseña', { exact: true }).fill('Income-test-password-2026!');
+  await page.getByLabel('Confirma tu contraseña').fill('Income-test-password-2026!');
+  await page.getByRole('button', { name: 'Crear cuenta' }).click();
+  await page.getByRole('link', { name: 'Crear mi primer proyecto' }).click();
+  await page.getByRole('link', { name: 'Crear cliente' }).click();
+  await page.getByLabel('Nombre del cliente').fill('Estudio Norte');
+  await page.getByRole('button', { name: 'Guardar cliente' }).click();
+  await expect(page.getByRole('combobox', { name: 'Cliente' }).locator('option:checked')).toHaveText('Estudio Norte');
+  await page.getByLabel('Nombre del proyecto').fill('Identidad visual');
+  await page.getByLabel('Origen del proyecto').fill('Recomendación');
+  await page.getByLabel('Monto acordado (MXN)').fill('5000');
+  await page.getByLabel('Pagos acordados').fill('3');
+  await page.getByRole('button', { name: 'Guardar proyecto' }).click();
+  await expect(page.getByText('0 de 3 pagos recibidos')).toBeVisible();
+  const projectUrl = page.url();
+  await page.getByRole('link', { name: 'Registrar cobro' }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await page.getByLabel('Fecha de pago').fill('2025-11-30');
+  await page.getByLabel('Importe abonado (MXN)').fill('3000');
+  await page.getByLabel('Comisión de plataforma (MXN)').fill('150.25');
+  await page.getByLabel('Impuestos descontados (MXN)').fill('49.75');
+  await expect(page.getByText('Dinero recibido al cobrar: MXN 2800.00')).toBeVisible();
+
+  let savedId: string | undefined;
+  const keys: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/api/payments' && request.method() === 'POST') {
+      keys.push(request.headers()['idempotency-key']);
+    }
+  });
+  await page.route(`${origin}/api/payments`, async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    savedId = (await response.json()).id;
+    await route.abort('failed');
+  }, { times: 1 });
+  await page.getByRole('button', { name: 'Guardar cobro' }).evaluate((button: HTMLButtonElement) => {
+    button.form!.requestSubmit();
+    button.form!.requestSubmit();
+  });
+  await expect(page.getByRole('alert')).toContainText('Reintenta el mismo guardado');
+  expect(keys).toHaveLength(1);
+  const replay = page.waitForResponse(response => new URL(response.url()).pathname === '/api/payments');
+  await page.getByRole('button', { name: 'Guardar cobro' }).click();
+  expect((await replay).status()).toBe(200);
+  expect(keys[1]).toBe(keys[0]);
+  await page.getByRole('link', { name: 'Ver detalle del cobro' }).click();
+  await expect(page).toHaveURL(new RegExp(`id=${savedId}$`));
+  await expect(page.getByRole('heading', { name: 'Detalle del cobro' })).toBeVisible();
+  await page.getByText('Registrar cargo separado').click();
+  await page.getByLabel('Fecha del cargo').fill('2025-12-02');
+  await page.getByLabel('Importe del cargo (MXN)').fill('50');
+  await page.route(`${origin}/api/payments/${savedId}/charges`, async route => {
+    expect((await route.fetch()).status()).toBe(201);
+    await route.abort('failed');
+  }, { times: 1 });
+  await page.getByRole('button', { name: 'Guardar cargo' }).click();
+  await expect(page.getByRole('alert')).toContainText('reintenta');
+  const chargeReplay = page.waitForResponse(response => response.url().endsWith('/charges'));
+  await page.getByRole('button', { name: 'Guardar cargo' }).click();
+  expect((await chargeReplay).status()).toBe(200);
+  await expect(page.getByText('Comisión · 2025-12-02 · MXN 50.00')).toBeVisible();
+  await expect(page.getByText('Comisión · 2025-12-02 · MXN 50.00')).toHaveCount(1);
+  await page.getByText('Registrar cargo separado').click();
+  await page.getByLabel('Tipo de cargo').selectOption('tax');
+  await page.getByLabel('Fecha del cargo').fill('2025-12-03');
+  await page.getByLabel('Importe del cargo (MXN)').fill('25');
+  await page.getByRole('button', { name: 'Guardar cargo' }).click();
+  await expect(page.getByText('Impuesto · 2025-12-03 · MXN 25.00')).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('link', { name: 'Volver al tablero' }).click();
+  await page.getByLabel('Mes del reporte').fill('2025-11');
+  await expect(page.locator('#report-total')).toHaveText('MXN 3000.00');
+  await page.locator('#report-payments').getByRole('link').click();
+  await expect(page.getByText('Comisión · 2025-12-02 · MXN 50.00')).toBeVisible();
+  await context.setOffline(true);
+  await expect(page.getByText('Comisión · 2025-12-02 · MXN 50.00')).toBeHidden();
+  await context.setOffline(false);
+  await page.goto(projectUrl);
+  await page.getByRole('link', { name: 'Registrar cobro' }).click();
+  await page.getByLabel('Fecha de pago').fill('2025-12-01');
+  await page.getByLabel('Fuente del cobro').selectOption('platform');
+  await page.getByLabel('Nombre de la fuente').fill('Upwork');
+  await page.getByLabel('Importe abonado (MXN)').fill('2000.001');
+  await page.getByRole('button', { name: 'Guardar cobro' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByLabel('Nombre de la fuente')).toHaveValue('Upwork');
+  await page.getByLabel('Importe abonado (MXN)').fill('2100');
+  await expect(page.getByText('El total supera el monto acordado en MXN 100.00.')).toBeVisible();
+  await page.getByLabel('Razón del excedente').fill('Trabajo adicional');
+  await page.getByRole('button', { name: 'Guardar cobro' }).click();
+  await expect(page.getByText('Excedente al guardar: MXN 100.00.')).toBeVisible();
+  await page.getByRole('link', { name: 'Ver detalle del cobro' }).click();
+  await expect(page.getByText('Trabajo adicional')).toBeVisible();
+  await page.goto(projectUrl);
+  await expect(page.getByText('2 de 3 pagos recibidos')).toBeVisible();
+  expect(keys[2]).not.toBe(keys[0]);
+  expect(keys[3]).toBe(keys[2]);
+});

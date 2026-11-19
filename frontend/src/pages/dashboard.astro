@@ -32,11 +32,13 @@ import AppLayout from '../layouts/AppLayout.astro';
     <div class="collections">
       <section class="panel" aria-labelledby="clients-title">
         <h2 id="clients-title">Clientes</h2>
+        <a href="/clients/new">Nuevo cliente</a>
         <ul id="clients" class="records"></ul>
         <p class="empty">Aún no tienes clientes.</p>
       </section>
       <section class="panel" aria-labelledby="projects-title">
         <h2 id="projects-title">Proyectos</h2>
+        <a href="/projects/new">Nuevo proyecto</a>
         <ul id="projects" class="records"></ul>
         <p class="empty">Aún no tienes proyectos.</p>
       </section>
@@ -99,15 +101,21 @@ import AppLayout from '../layouts/AppLayout.astro';
   const reportPayments = document.querySelector<HTMLElement>('#report-payments')!;
   const lists = ['clients', 'projects', 'payments'].map((id) => document.getElementById(id)!);
   let reportRequest: AbortController | undefined;
-  function renderList(list: HTMLElement, items: string[]) {
+  function renderList(list: HTMLElement, items: (string | { text: string; href: string })[]) {
     list.replaceChildren(...items.map((text) => {
       const item = document.createElement('li');
-      item.textContent = text;
+      if (typeof text === 'string') item.textContent = text;
+      else {
+        const link = document.createElement('a');
+        link.href = text.href;
+        link.textContent = text.text;
+        item.append(link);
+      }
       return item;
     }));
   }
-  function paymentLabel(payment: { paidOn: string; currency: string; clientPaidAmount: string }) {
-    return `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`;
+  function paymentLabel(payment: { id: string; paidOn: string; currency: string; clientPaidAmount: string }) {
+    return { text: `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`, href: `/payments/view?id=${encodeURIComponent(payment.id)}` };
   }
   async function report(passive = false) {
     reportRequest?.abort();
@@ -151,7 +159,7 @@ import AppLayout from '../layouts/AppLayout.astro';
       firstProject.hidden = data.projects.length !== 0;
       month.value = data.month;
       renderList(lists[0], data.clients.map((client: { name: string }) => client.name));
-      renderList(lists[1], data.projects.map((project: { name: string }) => project.name));
+      renderList(lists[1], data.projects.map((project: { id: string; name: string }) => ({ text: project.name, href: `/projects/view?id=${encodeURIComponent(project.id)}` })));
       renderList(lists[2], data.payments.map(paymentLabel));
       status.textContent = '';
       void report(true);

@@ -1,19 +1,7 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
+import IncomePage from '../../components/IncomePage';
 ---
-<AppLayout title="Crear mi primer proyecto">
-  <p id="status" role="status">Verificando tu sesión…</p>
-  <section id="project-entry" hidden>
-    <h1>Crear mi primer proyecto</h1>
-    <a href="/dashboard">Volver al tablero</a>
-  </section>
+<AppLayout title="Nuevo proyecto">
+  <IncomePage mode="project" client:load />
 </AppLayout>
-<script>
-  import { watchPrivateSession } from '../../lib/private-session';
-  const entry = document.querySelector<HTMLElement>('#project-entry')!;
-  const status = document.querySelector<HTMLElement>('#status')!;
-  watchPrivateSession(() => { entry.hidden = true; }, () => {
-    entry.hidden = false;
-    status.textContent = '';
-  });
-</script>

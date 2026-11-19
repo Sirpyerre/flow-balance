@@ -9,6 +9,9 @@ const { title, description, publicPage = false } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {description && <meta name="description" content={description} />}
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/app-192.png" />
+    <meta name="theme-color" content="#0b0b0f" />
     <title>{title ? `${title} · Flow Balance` : 'Flow Balance'}</title>
   </head>
   <body class:list={{ 'public-page': publicPage }}>
@@ -17,3 +20,7 @@ const { title, description, publicPage = false } = Astro.props;
     <slot name="footer" />
   </body>
 </html>
+<script>
+  import { registerServiceWorker } from '../lib/register-service-worker';
+  void registerServiceWorker();
+</script>

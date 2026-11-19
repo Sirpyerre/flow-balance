@@ -10,10 +10,10 @@ final readonly class ClientPaidAmount
 {
     public string $value;
 
-    public function __construct(mixed $value)
+    public function __construct(mixed $value, bool $allowZero = false)
     {
         if (!is_string($value) || !preg_match('/\A[0-9]{1,14}(?:\.[0-9]{1,2})?\z/', $value)
-            || trim($value, '0.') === '') {
+            || (!$allowZero && trim($value, '0.') === '')) {
             throw new InvalidArgumentException('Expected a positive decimal amount with at most two decimal places');
         }
         [$integer, $fraction] = array_pad(explode('.', $value, 2), 2, '');

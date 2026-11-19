@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "preview": "astro preview"
   },
   "private": true,
   "type": "module",

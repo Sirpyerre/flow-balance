@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 
+import AuthField from './AuthField';
 import { submitCredentials, type ApiError } from '../lib/auth-api';
 
 export default function RegisterForm() {
@@ -36,13 +37,7 @@ export default function RegisterForm() {
   ];
 
   return <form method="post" onSubmit={submit} aria-busy={pending} noValidate>
-    {fields.map(({ name, label, type, autoComplete, placeholder }) => <label key={name}>
-      {label}
-      <input name={name} type={type} autoComplete={autoComplete} placeholder={placeholder} required
-        aria-invalid={Boolean(error?.fields?.[name])}
-        aria-describedby={error?.fields?.[name] ? `${name}-error` : undefined} />
-      {error?.fields?.[name] && <small className="field-error" id={`${name}-error`}>{error.fields[name]}</small>}
-    </label>)}
+    {fields.map(field => <AuthField key={field.name} {...field} error={error?.fields?.[field.name]} />)}
     {error?.message && <p role="alert">{error.message}</p>}
     <button type="submit" disabled={pending} aria-label={pending ? 'Procesando solicitud' : undefined}>
       {pending ? <span className="spinner" aria-hidden="true" /> : 'Crear cuenta'}

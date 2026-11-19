@@ -5,6 +5,7 @@ declare(strict_types=1);
 use FlowBalance\Finance\Infrastructure\PostgresAccountDataReader;
 use FlowBalance\Finance\Infrastructure\PostgresMonthlyReportReader;
 use FlowBalance\Finance\Http\OwnedResourceHandler;
+use FlowBalance\Finance\Http\IncomeWriteHandler;
 use FlowBalance\Identity\Application\LoginUser;
 use FlowBalance\Identity\Application\RegisterUser;
 use FlowBalance\Identity\Domain\SessionPolicy;
@@ -132,6 +133,20 @@ return static function (Application $app): void {
             return new JsonResponse($reader->read($request->getAttribute(SessionInterface::class)->get('userId'), $month, $currency));
         },
     ]);
+    foreach ([
+        '/api/clients' => 'client',
+        '/api/projects' => 'project',
+        '/api/payments/preview' => 'preview',
+        '/api/payments' => 'payment',
+        '/api/payments/{id}/charges' => 'charge',
+    ] as $path => $operation) {
+        $app->post($path, [$transaction, $private,
+            static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($operation) {
+                $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+                return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new IncomeWriteHandler($operation));
+            },
+        ]);
+    }
     foreach (['clients', 'projects', 'payments'] as $type) {
         $handler = new OwnedResourceHandler($type);
         $app->get("/api/{$type}/{id}", [$transaction, $private, $handler], "{$type}.get");

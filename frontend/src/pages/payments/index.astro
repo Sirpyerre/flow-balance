@@ -1,0 +1,76 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+---
+<AppLayout title="Cobros guardados">
+  <a class="income-back" href="/dashboard">← Volver al tablero</a>
+  <section class="income-panel" aria-labelledby="payments-heading">
+    <h1 id="payments-heading">Cobros guardados</h1>
+    <p id="status" role="status">Verificando tu sesión…</p>
+    <ul class="income-records" id="history" role="list" hidden></ul>
+    <button id="next-payments" type="button" hidden>Cargar más cobros</button>
+  </section>
+</AppLayout>
+
+<script>
+  import { incomeRequest, resourceQuery, type DashboardPayment } from '../../lib/income-api';
+  import { watchPrivateSession } from '../../lib/private-session';
+
+  const list = document.querySelector<HTMLUListElement>('#history')!;
+  const status = document.querySelector<HTMLElement>('#status')!;
+  const next = document.querySelector<HTMLButtonElement>('#next-payments')!;
+  let cursor: string | null = null;
+  let activeRequest: AbortController | undefined;
+
+  function clear() {
+    activeRequest?.abort();
+    activeRequest = undefined;
+    cursor = null;
+    list.replaceChildren();
+    list.hidden = next.hidden = true;
+    status.textContent = '';
+  }
+
+  const session = watchPrivateSession(clear, () => void load());
+  addEventListener('income-session-response', event => session.updateDeadline((event as CustomEvent<Response>).detail));
+
+  async function load() {
+    if (activeRequest) return;
+    const request = new AbortController();
+    activeRequest = request;
+    next.hidden = true;
+    status.textContent = 'Cargando cobros…';
+    try {
+      const query = cursor ? '?' + resourceQuery('cursor', cursor) : '';
+      const result = await incomeRequest<{ payments: DashboardPayment[]; nextCursor: string | null }>(`/api/payments${query}`, {
+        signal: request.signal, passive: true,
+      });
+      if (request.signal.aborted) return;
+      for (const payment of result.payments) {
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '/payments/view?' + resourceQuery('id', payment.id);
+        link.textContent = `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`;
+        item.append(link);
+        list.append(item);
+      }
+      cursor = result.nextCursor;
+      list.hidden = list.children.length === 0;
+      status.textContent = list.hidden ? 'Aún no tienes cobros.' : '';
+      next.textContent = 'Cargar más cobros';
+      next.hidden = cursor === null;
+    } catch {
+      if (request.signal.aborted) return;
+      status.textContent = 'No se pudieron cargar los cobros.';
+      next.textContent = 'Reintentar';
+      next.hidden = false;
+    } finally {
+      if (activeRequest === request) activeRequest = undefined;
+    }
+  }
+  next.addEventListener('click', () => void load());
+  session.verify();
+</script>
+
+<style>
+  #next-payments[hidden] { display: none; }
+</style>

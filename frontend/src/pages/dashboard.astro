@@ -1,39 +1,103 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
+const monthNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
+const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' });
 ---
-<AppLayout title="Tablero">
-  <div class="dashboard-heading">
-    <h1>Tablero</h1>
-    <a class="button primary" id="first-project" href="/projects/new" hidden>Crear mi primer proyecto</a>
+<AppLayout title="Tablero" wide>
+  <div class="dashboard-shell" id="dashboard">
+  <nav class="dashboard-nav" aria-label="Navegación del tablero">
+    <a href="#dashboard" class="dashboard-brand" aria-label="Flow Balance">FB</a>
+    <div class="dashboard-nav-links">
+      <a href="#dashboard" aria-label="Tablero" title="Tablero"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <a href="/payments" aria-label="Historial de cobros" title="Historial de cobros"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></a>
+      <a href="#monthly-chart" aria-label="Cobros por mes" title="Cobros por mes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 17v-6m6 6V4m6 13v-8"/></svg></a>
+      <a href="#clients-title" aria-label="Clientes" title="Clientes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></a>
+      <a href="#projects-title" aria-label="Proyectos" title="Proyectos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></a>
+    </div>
+  </nav>
+  <div class="dashboard-content">
+  <div class="dashboard-toolbar">
+    <label class="dashboard-search" hidden>
+      <span class="dashboard-sr">Buscar clientes o proyectos</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>
+      <input id="dashboard-search" type="search" placeholder="Buscar clientes o proyectos" aria-controls="clients projects" />
+    </label>
+    <button id="logout" type="button" hidden>Cerrar sesión</button>
   </div>
-  <button id="logout" type="button" hidden>Cerrar sesión</button>
+  <header class="dashboard-heading">
+    <div><h1>Tablero</h1><p id="dashboard-period"></p></div>
+    <div class="dashboard-actions">
+      <button class="button" id="month" type="button" aria-haspopup="dialog" aria-controls="month-dialog" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
+        <span>Mes del reporte</span>
+      </button>
+      <button class="button primary" id="capture" type="button" hidden>Registrar cobro</button>
+    </div>
+  </header>
+  <dialog id="month-dialog" aria-labelledby="month-dialog-title">
+    <h2 id="month-dialog-title">Mes del reporte</h2>
+    <div class="period-year">
+      <button id="previous-year" type="button" aria-label="Año anterior">‹</button>
+      <label>
+        <span class="dashboard-sr">Año</span>
+        <input id="report-year" type="number" inputmode="numeric" min="1000" step="1" required />
+      </label>
+      <button id="next-year" type="button" aria-label="Año siguiente">›</button>
+    </div>
+    <div class="period-months" role="group" aria-label="Meses">
+      {monthNumbers.map(number => <button type="button" data-month={number} aria-pressed="false">
+        {monthLabel.format(new Date(Date.UTC(2024, number - 1, 1))).replace('.', '')}
+      </button>)}
+    </div>
+    <div class="period-actions">
+      <button type="button" id="current-period">Este mes</button>
+      <form method="dialog"><button>Cancelar</button></form>
+    </div>
+  </dialog>
+  <dialog id="capture-dialog" aria-labelledby="capture-title">
+    <h2 id="capture-title">Elige un proyecto</h2>
+    <ul id="capture-projects" class="records"></ul>
+    <form method="dialog"><button>Cerrar</button></form>
+  </dialog>
+  <a class="button primary" id="first-project" href="/projects/new" hidden>Crear mi primer proyecto</a>
   <p id="logout-error" role="alert" hidden></p>
   <p id="status" role="status">Cargando tu tablero…</p>
+  <button id="dashboard-retry" type="button" hidden>Reintentar tablero</button>
   <div id="account" hidden>
-    <section class="panel summary" aria-labelledby="summary-title">
-      <h2 id="summary-title">Importe abonado este mes</h2>
-      <p id="total" class="amount"></p>
-    </section>
-
-    <section class="panel report" aria-labelledby="report-title">
+    <div class="dashboard-metrics">
+      <section class="panel summary" aria-labelledby="summary-title">
+        <h2 id="summary-title">Abonado este mes</h2>
+        <p id="total" class="amount"></p>
+        <p id="month-count" class="empty"></p>
+      </section>
+      <section class="panel" aria-labelledby="pending-title">
+        <h2 id="pending-title">Saldo pendiente</h2>
+        <p id="pending-total" class="amount"></p>
+        <p id="pending-count" class="empty"></p>
+        <p id="balance-exclusions" class="empty"></p>
+      </section>
+      <section class="panel" aria-labelledby="active-clients-title">
+        <h2 id="active-clients-title">Clientes activos</h2>
+        <p id="active-clients" class="amount"></p>
+        <p id="active-projects" class="empty"></p>
+      </section>
+    </div>
+    <div class="dashboard-main">
+    <section id="monthly-chart" class="panel chart-panel" aria-labelledby="chart-title">
       <div class="report-heading">
-        <h2 id="report-title">Reporte mensual</h2>
-        <div class="month-field">
-          <label for="month">Mes del reporte</label>
-          <input id="month" type="month" lang="es-MX" />
-        </div>
+        <h2 id="chart-title">Cobros por mes</h2>
+        <p id="chart-year" class="empty"></p>
       </div>
-      <p id="report-total" class="amount" role="status"></p>
-      <h3>Cobros del reporte</h3>
-      <ul id="report-payments" class="records"></ul>
-      <p id="report-empty" class="empty" hidden>No hay cobros en este mes.</p>
+      <div id="chart-bars" class="chart-bars" role="group" aria-label="Elige un mes para consultar su reporte"></div>
+      <div class="chart-legend" aria-hidden="true">
+        <span class="chart-selected-key">Mes seleccionado</span><span>Otros meses</span>
+      </div>
     </section>
-
     <section class="panel" aria-labelledby="project-balances-title">
       <div class="report-heading balance-heading">
-        <h2 id="project-balances-title">Saldos vigentes por proyecto</h2>
+        <h2 id="project-balances-title">Saldos por proyecto</h2>
         <div class="month-field balance-filter" hidden>
-          <label for="balance-filter">Mostrar proyectos</label>
+          <label class="dashboard-sr" for="balance-filter">Mostrar proyectos</label>
           <select id="balance-filter">
             <option value="outstanding">Pendientes</option>
             <option value="all">Todos</option>
@@ -46,29 +110,55 @@ import AppLayout from '../layouts/AppLayout.astro';
       <a id="balance-create" href="/projects/new" hidden>Nuevo proyecto</a>
     </section>
 
+    </div>
     <div class="collections">
       <section class="panel" aria-labelledby="clients-title">
         <div class="collection-heading">
-          <h2 id="clients-title">Clientes</h2>
-          <a class="button" href="/clients/new">Nuevo cliente</a>
+          <h2 id="clients-title">Clientes <span id="client-count"></span></h2>
+          <a href="/clients/new" aria-label="Nuevo cliente">+ Nuevo</a>
         </div>
         <ul id="clients" class="records collection-records" role="list"></ul>
-        <p class="empty">Aún no tienes clientes.</p>
+        <p id="clients-empty" class="empty">Aún no tienes clientes.</p>
       </section>
       <section class="panel" aria-labelledby="projects-title">
         <div class="collection-heading">
-          <h2 id="projects-title">Proyectos</h2>
-          <a class="button" href="/projects/new">Nuevo proyecto</a>
+          <h2 id="projects-title">Proyectos <span id="project-count"></span></h2>
+          <a href="/projects/new" aria-label="Nuevo proyecto">+ Nuevo</a>
         </div>
         <ul id="projects" class="records collection-records" role="list"></ul>
-        <p class="empty">Aún no tienes proyectos.</p>
+        <p id="projects-empty" class="empty">Aún no tienes proyectos.</p>
       </section>
       <section class="panel" aria-labelledby="payments-title">
-        <h2 id="payments-title">Cobros guardados</h2>
+        <div class="collection-heading"><h2 id="payments-title">Últimos cobros <span id="payment-count"></span></h2>
+          <a href="/payments">Ver todos</a></div>
         <ul id="payments" class="records collection-records" role="list"></ul>
         <p class="empty">Aún no tienes cobros.</p>
       </section>
     </div>
+    <section class="panel report" aria-labelledby="report-title">
+      <div class="report-heading">
+        <h2 id="report-title">Cobros del mes</h2>
+        <p id="report-total" role="status"></p>
+      </div>
+      <ul id="report-payments" class="records"></ul>
+      <p id="report-empty" class="empty" hidden>No hay cobros en este mes.</p>
+      <div id="net-report" hidden>
+        <dl class="net-metrics">
+          <div><dt>Comisiones</dt><dd id="net-fees"></dd></div>
+          <div><dt>Impuestos</dt><dd id="net-taxes"></dd></div>
+          <div><dt>Neto del mes</dt><dd id="net-total"></dd></div>
+        </dl>
+        <p id="unconverted-payments" class="empty" hidden></p>
+        <details id="net-details">
+          <summary>Ver movimientos del mes</summary>
+          <ul id="net-movements" class="records"></ul>
+        </details>
+        <a id="report-export" class="button" download>Descargar CSV</a>
+      </div>
+      <button id="report-retry" type="button" hidden>Reintentar reporte</button>
+    </section>
+  </div>
+  </div>
   </div>
 </AppLayout>
 
@@ -159,18 +249,128 @@ import AppLayout from '../layouts/AppLayout.astro';
     .collections { grid-template-columns: 1fr; }
     .month-field { width: 100%; }
   }
+  .dashboard-heading { gap: .75rem; align-items: center; }
+  .dashboard-heading h1 { font-size: 1.55rem; }
+  #dashboard-period, #report-total { color: var(--muted); margin: 0; font-size: .875rem; }
+  .dashboard-actions { display: flex; flex-wrap: wrap; gap: .625rem; align-items: center; }
+  #balance-filter { min-height: 38px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--base); color: var(--text); padding: .4rem .75rem; font: inherit; font-size: .875rem; }
+  #account { margin-top: 1.125rem; gap: 1rem; }
+  .dashboard-metrics, .dashboard-main { display: grid; gap: 1rem; }
+  .dashboard-metrics { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); }
+  .dashboard-main { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .dashboard-main .panel { min-height: 13rem; }
+  .dashboard-metrics h2 { font-size: .875rem; color: var(--muted); }
+  .summary h2 { color: var(--link); }
+  .summary { background: linear-gradient(110deg, #211837, #21151b); }
+  .amount { margin-top: .375rem; line-height: 1.15; font-size: clamp(1.4rem, 3vw, 1.75rem); }
+  .summary .amount { font-size: clamp(1.7rem, 4vw, 2.25rem); }
+  .panel h2 { font-size: 1rem; }
+  .dashboard-metrics h2 { font-size: .875rem; }
+  .panel { padding: clamp(1rem, 2.25vw, 1.5rem); }
+  .collection-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+  .collection-heading a { font-size: .875rem; text-decoration: none; }
+  .collection-heading h2 span { color: var(--muted); }
+  .collections { gap: 1rem; }
+  .records { list-style: none; padding: 0; }
+  .records :global(li) { border-bottom: 1px solid var(--border); padding: .5625rem 0; font-size: .9rem; }
+  .records :global(li:last-child) { border-bottom: 0; }
+  .records :global(a) { display: flex; justify-content: space-between; gap: .625rem; color: var(--text); text-decoration: none; }
+  .records :global(a:hover), .collection-heading a:hover { text-decoration: underline; }
+  .records :global(a span) { color: var(--muted); text-align: end; }
+  #report-payments :global(a span) { color: var(--text); font-weight: 700; }
+  .balance-filter { width: auto; }
+  .balance-list :global(a) { color: var(--text); text-decoration: none; }
+  .balance-list :global(a:hover) { text-decoration: underline; }
+  .balance-list :global(.balance-state) { padding: .2rem .5rem; border-radius: .375rem; background: var(--surface); }
+  .balance-list :global(.balance-state.outstanding) { color: #ffbd47; background: #292010; }
+  .balance-list :global(progress) { display: block; margin-top: .875rem; width: 100%; height: .375rem; appearance: none; border: 0; border-radius: .375rem; background: var(--input-border); }
+  .balance-list :global(progress::-webkit-progress-bar) { background: var(--input-border); border-radius: .375rem; }
+  .balance-list :global(progress::-webkit-progress-value) { background: var(--gradient); border-radius: .375rem; }
+  .balance-list :global(progress::-moz-progress-bar) { background: var(--gradient); border-radius: .375rem; }
+  #capture-dialog, #month-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); color: var(--text); }
+  #capture-dialog::backdrop, #month-dialog::backdrop { background: #0009; }
+  #capture-dialog form { justify-content: end; }
+  .net-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); gap: .75rem; margin: 1rem 0; padding-top: .875rem; border-top: 1px solid var(--border); }
+  .net-metrics dt { color: var(--muted); font-size: .8125rem; }
+  .net-metrics dd { margin: .25rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
+  #net-details { margin-bottom: .75rem; }
+  #net-details summary { cursor: pointer; }
+  :global(.app-content-wide:has(.dashboard-shell)) { max-width: 90rem; margin: 0 auto; padding: 0; }
+  .dashboard-shell { display: grid; grid-template-columns: 4.75rem minmax(0, 1fr); min-height: 100vh; }
+  .dashboard-content { min-width: 0; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
+  .dashboard-nav { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 1.25rem .625rem; background: var(--surface); border-inline-end: 1px solid var(--border); }
+  .dashboard-nav-links { display: grid; gap: .625rem; }
+  .dashboard-nav a { display: grid; place-items: center; width: 2.625rem; height: 2.625rem; border-radius: .75rem; text-decoration: none; }
+  .dashboard-nav a:hover, .dashboard-nav-links a:first-child, .dashboard-brand { background: var(--border); color: var(--link); }
+  .dashboard-brand { font-weight: 800; }
+  .dashboard-nav svg, .dashboard-search svg, #month svg { width: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .dashboard-toolbar { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .dashboard-search { display: flex; align-items: center; gap: .55rem; width: min(100%, 22.5rem); border: 1px solid var(--input-border); border-radius: .625rem; background: var(--surface); padding-inline-start: .75rem; color: var(--muted); }
+  .dashboard-search input { width: 100%; min-width: 0; min-height: 2.375rem; border: 0; border-radius: .625rem; background: transparent; padding: .4rem .625rem .4rem 0; color: var(--text); font-size: .875rem; }
+  .dashboard-search svg { flex: 0 0 1rem; }
+  #logout { margin-inline-start: auto; white-space: nowrap; }
+  #month, #capture, #logout { min-height: 2.625rem; }
+  #month { background: var(--surface); }
+  #month svg { color: var(--link); flex-shrink: 0; }
+  #month-dialog { width: min(23rem, calc(100% - 2rem)); }
+  .period-year { display: grid; grid-template-columns: 2.625rem 1fr 2.625rem; gap: .5rem; margin: 1rem 0 .75rem; }
+  .period-year button { font-size: 1.2rem; padding: 0; }
+  .period-year input { width: 100%; height: 2.625rem; text-align: center; appearance: textfield; }
+  .period-year input::-webkit-inner-spin-button, .period-year input::-webkit-outer-spin-button { appearance: none; }
+  .period-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+  .period-months button { padding-inline: .375rem; min-height: 2.625rem; text-transform: capitalize; }
+  .period-months button[aria-pressed="true"] { color: var(--link); border-color: var(--accent); background: var(--base); }
+  .period-months button:disabled, .period-year button:disabled { opacity: .45; }
+  .period-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin-top: 1rem; }
+  .period-actions form { margin: 0; }
+  .dashboard-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-main { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .chart-panel { display: grid; gap: 1rem; align-content: start; }
+  .chart-bars { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; min-height: 12rem; }
+  .chart-bars :global(.chart-month) { display: grid; grid-template-rows: 10rem auto; border: 0; border-radius: .375rem; padding: 0; gap: .5rem; color: var(--muted); font-size: .7rem; background: transparent; }
+  .chart-bars :global(.chart-month[aria-pressed="true"]) { color: var(--text); }
+  .chart-bars :global(.chart-track) { display: flex; justify-content: center; align-items: end; width: 100%; height: 100%; border-bottom: 1px solid var(--input-border); background: repeating-linear-gradient(to top, transparent 0 calc(50% - 1px), var(--border) calc(50% - 1px) 50%); }
+  .chart-bars :global(.chart-bar) { width: min(62%, 1.875rem); height: var(--bar-height); border-radius: .325rem .325rem 0 0; background: var(--accent); opacity: .35; }
+  .chart-bars :global(.chart-month:hover .chart-bar), .chart-bars :global(.chart-month[aria-pressed="true"] .chart-bar) { opacity: 1; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: .875rem; color: var(--muted); font-size: .75rem; }
+  .chart-legend span::before { display: inline-block; content: ""; width: .625rem; height: .625rem; border-radius: .2rem; background: var(--accent); opacity: .35; margin-inline-end: .35rem; }
+  .chart-selected-key::before { opacity: 1 !important; }
+  .collection-records :global(a span) { color: var(--text); font-weight: 600; }
+  .collections .empty:not([hidden]) { display: block; }
+  .dashboard-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  @media (max-width: 700px) {
+    .dashboard-shell { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-nav { flex-direction: row; justify-content: space-between; gap: .375rem; border-inline-end: 0; border-bottom: 1px solid var(--border); padding: .5rem .75rem; }
+    .dashboard-nav-links { display: flex; gap: .25rem; }
+    .dashboard-nav a { width: 2.5rem; height: 2.5rem; }
+    .dashboard-metrics, .dashboard-main, .collections { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-heading { align-items: start; }
+    .dashboard-actions { width: 100%; }
+    .dashboard-main .panel { min-height: 0; }
+  }
 </style>
 <script>
-  import { amountLabel, collectionStatusLabel, resourceQuery, type ProjectBalanceRow } from '../lib/income-api';
+  import { collectionStatusLabel, resourceQuery, type DashboardPayment, type MonthlyReport, type ProjectBalanceRow } from '../lib/income-api';
   import { watchPrivateSession } from '../lib/private-session';
   const logout = document.querySelector<HTMLButtonElement>('#logout')!;
+  const search = document.querySelector<HTMLInputElement>('#dashboard-search')!;
+  const searchField = search.closest('label')!;
+  const chartBars = document.getElementById('chart-bars')!;
+  const chartYear = document.getElementById('chart-year')!;
   const logoutError = document.querySelector<HTMLElement>('#logout-error')!;
-  const session = watchPrivateSession(clear, load);
+  const session = watchPrivateSession(clear, load, reset);
   const status = document.querySelector<HTMLParagraphElement>('#status')!;
   const account = document.querySelector<HTMLElement>('#account')!;
   const total = document.querySelector<HTMLParagraphElement>('#total')!;
   const firstProject = document.querySelector<HTMLAnchorElement>('#first-project')!;
-  const month = document.querySelector<HTMLInputElement>('#month')!;
+  const month = document.querySelector<HTMLButtonElement>('#month')!;
+  const monthCaption = month.querySelector('span')!;
+  const monthDialog = document.querySelector<HTMLDialogElement>('#month-dialog')!;
+  const year = document.querySelector<HTMLInputElement>('#report-year')!;
+  const previousYear = document.querySelector<HTMLButtonElement>('#previous-year')!;
+  const nextYear = document.querySelector<HTMLButtonElement>('#next-year')!;
+  const currentPeriod = document.querySelector<HTMLButtonElement>('#current-period')!;
+  const periodMonths = [...monthDialog.querySelectorAll<HTMLButtonElement>('[data-month]')];
   const reportTotal = document.querySelector<HTMLElement>('#report-total')!;
   const reportEmpty = document.querySelector<HTMLElement>('#report-empty')!;
   const reportPayments = document.querySelector<HTMLElement>('#report-payments')!;
@@ -181,6 +381,51 @@ import AppLayout from '../layouts/AppLayout.astro';
   const balanceList = document.querySelector<HTMLElement>('#project-balances')!;
   const balanceRetry = document.querySelector<HTMLButtonElement>('#balance-retry')!;
   const balanceCreate = document.querySelector<HTMLAnchorElement>('#balance-create')!;
+  const capture = document.querySelector<HTMLButtonElement>('#capture')!;
+  const captureDialog = document.querySelector<HTMLDialogElement>('#capture-dialog')!;
+  const captureProjects = document.getElementById('capture-projects')!;
+  const reportRetry = document.querySelector<HTMLButtonElement>('#report-retry')!;
+  const dashboardRetry = document.querySelector<HTMLButtonElement>('#dashboard-retry')!;
+  const pendingTotal = document.getElementById('pending-total')!;
+  const pendingCount = document.getElementById('pending-count')!;
+  const balanceExclusions = document.getElementById('balance-exclusions')!;
+  const netReport = document.getElementById('net-report')!;
+  const netDetails = document.querySelector<HTMLDetailsElement>('#net-details')!;
+  const netMovements = document.getElementById('net-movements')!;
+  const unconvertedPayments = document.getElementById('unconverted-payments')!;
+  const reportExport = document.querySelector<HTMLAnchorElement>('#report-export')!;
+  const netFigures = ['net-fees', 'net-taxes', 'net-total'].map(id => document.getElementById(id)!);
+  const numberLabel = (value: string) => {
+    const [whole, fraction = ''] = value.split('.');
+    return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + fraction.padEnd(2, '0');
+  };
+  const amountLabel = (value: string) => `MXN ${numberLabel(value)}`;
+  const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', timeZone: 'UTC' });
+  const dateFormat = new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+  const monthName = (value: string) => monthFormat.format(new Date(value + '-01T00:00:00Z'));
+  const periodName = (value: string) => {
+    const name = monthName(value);
+    return name[0].toUpperCase() + name.slice(1) + ' ' + value.slice(0, 4);
+  };
+  const shortMonth = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' });
+  let monthlyPaidTotals: Record<string, string> = {};
+  let currentMonth = '';
+  let selectedMonth = '';
+  let projects: { id: string; name: string }[] = [];
+  const capturePath = (id: string) => `/payments/new?${resourceQuery('projectId', id)}`;
+  capture.addEventListener('click', () => {
+    if (projects.length === 0) return location.assign('/projects/new');
+    if (projects.length === 1) return location.assign(capturePath(projects[0].id));
+    const states = new Map(balanceRows.map(row => [row.projectId, row.collectionStatus]));
+    const ordered = [...projects].sort((first, second) =>
+      Number(states.get(second.id) === 'outstanding') - Number(states.get(first.id) === 'outstanding')
+      || first.name.localeCompare(second.name, 'es-MX') || (BigInt(first.id) < BigInt(second.id) ? -1 : 1));
+    renderList(captureProjects, ordered.map(project => ({
+      text: project.name, href: capturePath(project.id),
+      aside: collectionStatusLabel[states.get(project.id) ?? 'undetermined'],
+    })));
+    captureDialog.showModal();
+  });
   let balanceRequest: AbortController | undefined;
   let balanceRows: ProjectBalanceRow[] = [];
 
@@ -199,7 +444,7 @@ import AppLayout from '../layouts/AppLayout.astro';
       const heading = document.createElement('div');
       heading.className = 'balance-row-heading';
       const state = document.createElement('span');
-      state.className = 'balance-state';
+      state.className = 'balance-state ' + row.collectionStatus;
       state.textContent = collectionStatusLabel[row.collectionStatus];
       heading.append(link, state);
 
@@ -209,7 +454,7 @@ import AppLayout from '../layouts/AppLayout.astro';
         ['Monto acordado', row.agreedAmount === null ? 'Sin registrar' : amountLabel(row.agreedAmount)],
         ['Total abonado', amountLabel(row.clientPaidTotal)],
       ];
-      if (row.outstandingBalance !== null) metrics.push(['Saldo pendiente', amountLabel(row.outstandingBalance)]);
+      if (row.outstandingBalance !== null) metrics.push([row.isBalanceProvisional ? 'Saldo pendiente provisional' : 'Saldo pendiente', amountLabel(row.outstandingBalance)]);
       if (row.collectionStatus === 'overpaid' && row.excessAmount !== null) metrics.push(['Excedente', amountLabel(row.excessAmount)]);
       for (const [label, value] of metrics) {
         const metric = document.createElement('div');
@@ -221,7 +466,21 @@ import AppLayout from '../layouts/AppLayout.astro';
         metric.append(term, amount);
         amounts.append(metric);
       }
-      item.append(heading, amounts);
+      item.append(heading);
+      if (row.agreedAmount !== null && Number(row.agreedAmount) > 0) {
+        const progress = document.createElement('progress');
+        progress.max = 100;
+        progress.value = Math.min(100, Number(row.clientPaidTotal) / Number(row.agreedAmount) * 100);
+        progress.setAttribute('aria-label', `Avance de cobro de ${row.name}`);
+        item.append(progress);
+      }
+      item.append(amounts);
+      if (row.unconvertedPaymentCount) {
+        const warning = document.createElement('p');
+        warning.className = 'empty';
+        warning.textContent = row.isBalanceProvisional ? 'Saldo provisional · Hay cobros sin convertir.' : 'Hay cobros sin convertir.';
+        item.append(warning);
+      }
       return item;
     }));
   }
@@ -236,6 +495,9 @@ import AppLayout from '../layouts/AppLayout.astro';
     balanceRetry.hidden = true;
     balanceCreate.hidden = true;
     balanceStatus.textContent = '';
+    pendingTotal.textContent = '';
+    pendingCount.textContent = '';
+    balanceExclusions.textContent = '';
   }
 
   async function loadBalances() {
@@ -255,10 +517,19 @@ import AppLayout from '../layouts/AppLayout.astro';
         return;
       }
       if (!response.ok) throw new Error();
-      const data: { projects: ProjectBalanceRow[] } = await response.json();
+      const data: { projects: ProjectBalanceRow[]; totalOutstandingBalance: string; pendingProjectCount: number; excludedUnconvertedProjectCount?: number } = await response.json();
       if (!isCurrent()) return;
       session.updateDeadline(response);
       balanceRows = data.projects;
+      pendingTotal.textContent = data.totalOutstandingBalance === undefined ? '—' : amountLabel(data.totalOutstandingBalance);
+      if (data.pendingProjectCount !== undefined) {
+        pendingCount.textContent = data.pendingProjectCount === 1 ? '1 proyecto pendiente' : `${data.pendingProjectCount} proyectos pendientes`;
+      }
+      const excluded = data.excludedUnconvertedProjectCount ?? 0;
+      if (excluded > 0) balanceExclusions.textContent = excluded === 1
+        ? '1 proyecto con cobros sin convertir excluido del saldo global.'
+        : `${excluded} proyectos con cobros sin convertir excluidos del saldo global.`;
+      capture.disabled = false;
       balanceFilterField.hidden = balanceRows.length === 0;
       renderBalances();
     } catch {
@@ -272,46 +543,206 @@ import AppLayout from '../layouts/AppLayout.astro';
   balanceRetry.addEventListener('click', () => void loadBalances());
 
   let reportRequest: AbortController | undefined;
-  function renderList(list: HTMLElement, items: (string | { text: string; href: string })[]) {
+  function renderList(list: HTMLElement, items: { text: string; href: string; aside?: string }[]) {
     list.replaceChildren(...items.map((text) => {
       const item = document.createElement('li');
-      if (typeof text === 'string') item.textContent = text;
-      else {
-        const link = document.createElement('a');
-        link.href = text.href;
-        link.textContent = text.text;
-        item.append(link);
+      const link = document.createElement('a');
+      link.href = text.href;
+      link.textContent = text.text;
+      if (text.aside) {
+        const aside = document.createElement('span');
+        aside.textContent = text.aside;
+        link.append(aside);
       }
+      item.append(link);
       return item;
     }));
   }
-  function paymentLabel(payment: { id: string; paidOn: string; currency: string; clientPaidAmount: string }) {
-    return { text: `${payment.paidOn} · ${payment.currency} ${payment.clientPaidAmount}`, href: `/payments/view?id=${encodeURIComponent(payment.id)}` };
+  function paymentLabel(payment: DashboardPayment) {
+    return {
+      text: dateFormat.format(new Date(payment.paidOn + 'T00:00:00Z')),
+      href: `/payments/view?${resourceQuery('id', payment.id)}`,
+      aside: `${payment.currency} ${numberLabel(payment.clientPaidAmount)}`,
+    };
   }
+  function clearNetReport() {
+    netReport.hidden = true;
+    netDetails.open = false;
+    netMovements.replaceChildren();
+    netFigures.forEach(figure => { figure.textContent = ''; });
+    unconvertedPayments.textContent = '';
+    unconvertedPayments.hidden = true;
+    reportExport.removeAttribute('href');
+  }
+
+  function renderNetReport(data: MonthlyReport, query: URLSearchParams) {
+    if (!data.movements) return;
+    const amounts = [data.platformFeeTotal, data.taxTotal, data.netReceivedTotal];
+    netFigures.forEach((figure, index) => { figure.textContent = amountLabel(amounts[index]); });
+    renderList(netMovements, data.movements.map(movement => {
+      const date = dateFormat.format(new Date(movement.paidOn + 'T00:00:00Z'));
+      const kind = { payment: 'Cobro', commission: 'Comisión separada', tax: 'Impuesto separado' }[movement.kind];
+      return {
+        text: `${kind} · ${date}`,
+        href: `/payments/view?${resourceQuery('id', movement.paymentId)}`,
+        aside: movement.netAmount === null
+          ? `${movement.currency} ${numberLabel(movement.originalPaidAmount)} · Sin convertir`
+          : amountLabel(movement.netAmount),
+      };
+    }));
+    netDetails.hidden = data.movements.length === 0;
+    const count = data.unconvertedPaymentCount;
+    unconvertedPayments.hidden = count === 0;
+    unconvertedPayments.textContent = count === 1 ? '1 cobro sin convertir queda fuera de los totales.'
+      : `${count} cobros sin convertir quedan fuera de los totales.`;
+    reportExport.href = `/api/reports/monthly/export?${query}`;
+    netReport.hidden = false;
+  }
+
+  function renderChart(period: string) {
+    const year = period.slice(0, 4);
+    const selected = Number(period.slice(5));
+    const last = Math.min(12, Math.max(9, selected));
+    const periods = Array.from({ length: 9 }, (_, index) => `${year}-${String(last - 8 + index).padStart(2, '0')}`);
+    const ceiling = Math.max(1, ...periods.map(value => Number(monthlyPaidTotals[value] ?? 0)));
+    const focused = document.activeElement?.closest<HTMLButtonElement>('.chart-month')?.value;
+    chartYear.textContent = year;
+    chartBars.replaceChildren(...periods.map(value => {
+      const amount = monthlyPaidTotals[value] ?? '0.00';
+      const button = document.createElement('button');
+      button.className = 'chart-month';
+      button.type = 'button';
+      button.value = value;
+      button.disabled = value > currentMonth;
+      button.setAttribute('aria-pressed', String(value === period));
+      button.setAttribute('aria-label', `${periodName(value)}, ${amountLabel(amount)}`);
+      button.title = amountLabel(amount);
+      const track = document.createElement('span');
+      track.className = 'chart-track';
+      track.setAttribute('aria-hidden', 'true');
+      const bar = document.createElement('span');
+      bar.className = 'chart-bar';
+      bar.style.setProperty('--bar-height', `${Number(amount) / ceiling * 100}%`);
+      track.append(bar);
+      const label = document.createElement('span');
+      const monthText = shortMonth.format(new Date(value + '-01T00:00:00Z')).replace('.', '');
+      label.textContent = monthText.charAt(0).toUpperCase() + monthText.slice(1);
+      button.append(track, label);
+      return button;
+    }));
+    if (focused) chartBars.querySelector<HTMLButtonElement>(`button[value="${focused}"]`)?.focus({ preventScroll: true });
+  }
+
+  chartBars.addEventListener('click', event => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.chart-month');
+    if (!button) return;
+    selectPeriod(button.value);
+  });
+
+  function selectPeriod(period: string) {
+    if (period === selectedMonth || period > currentMonth) return;
+    selectedMonth = period;
+    void report();
+  }
+
+  function monthInYear(button: HTMLButtonElement) {
+    return `${year.valueAsNumber}-${button.dataset.month!.padStart(2, '0')}`;
+  }
+
+  function updatePicker() {
+    previousYear.disabled = !year.validity.valid || year.valueAsNumber <= Number(year.min);
+    nextYear.disabled = !year.validity.valid || year.valueAsNumber >= Number(year.max);
+    for (const button of periodMonths) {
+      const period = monthInYear(button);
+      button.disabled = !Number.isInteger(year.valueAsNumber) || !year.validity.valid || period > currentMonth;
+      button.setAttribute('aria-pressed', String(period === selectedMonth));
+      button.setAttribute('aria-label', !year.validity.valid || !year.value
+        ? button.textContent!.trim() : periodName(period));
+    }
+  }
+
+  month.addEventListener('click', () => {
+    year.max = currentMonth.slice(0, 4);
+    year.value = selectedMonth.slice(0, 4);
+    updatePicker();
+    monthDialog.showModal();
+    const selected = periodMonths.find(button => button.getAttribute('aria-pressed') === 'true');
+    (selected ?? year).focus();
+  });
+  year.addEventListener('input', updatePicker);
+  previousYear.addEventListener('click', () => { year.stepDown(); updatePicker(); });
+  nextYear.addEventListener('click', () => { year.stepUp(); updatePicker(); });
+  for (const button of periodMonths) {
+    button.addEventListener('click', () => {
+      monthDialog.close();
+      selectPeriod(monthInYear(button));
+    });
+  }
+  currentPeriod.addEventListener('click', () => {
+    monthDialog.close();
+    selectPeriod(currentMonth);
+  });
+
+  function filterCollections() {
+    const query = search.value.trim().toLocaleLowerCase('es-MX');
+    for (const list of lists.slice(0, 2)) {
+      const empty = document.getElementById(`${list.id}-empty`)!;
+      const entries = [...list.children] as HTMLElement[];
+      for (const item of entries) item.hidden = !(item.textContent ?? '').toLocaleLowerCase('es-MX').includes(query);
+      empty.hidden = entries.some(item => !item.hidden);
+      empty.textContent = entries.length === 0
+        ? (list.id === 'clients' ? 'Aún no tienes clientes.' : 'Aún no tienes proyectos.')
+        : 'Sin coincidencias.';
+    }
+  }
+  search.addEventListener('input', filterCollections);
+
   async function report(passive = false) {
     reportRequest?.abort();
+    clearNetReport();
     reportPayments.replaceChildren();
     reportEmpty.hidden = true;
-    reportTotal.textContent = '';
-    if (!month.value) return;
+    reportRetry.hidden = true;
+    reportTotal.textContent = 'Cargando…';
+    total.textContent = '';
+    document.getElementById('month-count')!.textContent = '';
+    if (!selectedMonth) return;
+    const period = selectedMonth;
+    monthCaption.textContent = periodName(period);
+    month.setAttribute('aria-label', `Mes del reporte: ${periodName(period)}`);
+    renderChart(selectedMonth);
+    document.getElementById('dashboard-period')!.textContent = periodName(period);
+    document.getElementById('summary-title')!.textContent = period === currentMonth ? 'Abonado este mes' : `Abonado en ${periodName(period)}`;
+    document.getElementById('report-title')!.textContent = `Cobros de ${monthName(period)}`;
     const current = new AbortController();
     reportRequest = current;
     try {
-      const query = new URLSearchParams({ month: month.value, currency: 'MXN' });
+      const query = new URLSearchParams({ month: period, currency: 'MXN' });
       const response = await fetch(`/api/reports/monthly?${query}`, { cache: 'no-store', signal: current.signal, headers: passive ? { 'X-Session-Activity': 'passive' } : {} });
       if (response.status === 401) return location.replace('/login');
       if (!response.ok) throw new Error();
       const data = await response.json();
       if (current.signal.aborted) return;
       session.updateDeadline(response);
-      reportTotal.textContent = `${data.currency} ${data.clientPaidTotal}`;
+      renderNetReport(data, query);
+      if (monthlyPaidTotals[selectedMonth] !== data.clientPaidTotal) {
+        monthlyPaidTotals[selectedMonth] = data.clientPaidTotal;
+        renderChart(selectedMonth);
+      }
+      total.textContent = reportTotal.textContent = amountLabel(data.clientPaidTotal);
+      const paymentCount = data.payments.length + (data.unconvertedPaymentCount ?? 0);
+      document.getElementById('month-count')!.textContent = paymentCount === 1 ? '1 cobro registrado' : `${paymentCount} cobros registrados`;
       renderList(reportPayments, data.payments.map(paymentLabel));
-      reportEmpty.hidden = data.payments.length !== 0;
+      reportEmpty.hidden = paymentCount !== 0;
     } catch {
-      if (!current.signal.aborted) reportTotal.textContent = 'No se pudo cargar el reporte.';
+      if (!current.signal.aborted) {
+        reportTotal.textContent = 'No se pudo cargar el reporte.';
+        reportRetry.hidden = false;
+      }
     }
   }
-  month.addEventListener('change', () => void report());
+  reportRetry.addEventListener('click', () => void report());
+  dashboardRetry.addEventListener('click', () => void load());
   let request: AbortController | undefined;
   async function load() {
     request?.abort();
@@ -326,33 +757,70 @@ import AppLayout from '../layouts/AppLayout.astro';
       if (!response.ok) throw new Error();
       const data = await response.json();
       if (current.signal.aborted) return;
-      total.textContent = `${data.currency} ${data.clientPaidTotal}`;
-      firstProject.hidden = data.projects.length !== 0;
-      month.value = data.month;
-      renderList(lists[0], data.clients.map((client: { name: string }) => client.name));
-      renderList(lists[1], data.projects.map((project: { id: string; name: string }) => ({ text: project.name, href: `/projects/view?id=${encodeURIComponent(project.id)}` })));
-      renderList(lists[2], data.payments.map(paymentLabel));
+      currentMonth = data.month;
+      monthlyPaidTotals = data.monthlyPaidTotals ?? {};
+      projects = data.projects;
+      firstProject.hidden = projects.length !== 0;
+      capture.disabled = projects.length > 1;
+      selectedMonth ||= currentMonth;
+      document.getElementById('active-clients')!.textContent = String(data.activeClientCount);
+      document.getElementById('active-projects')!.textContent = data.projectCount === 1 ? '1 proyecto' : `${data.projectCount} proyectos`;
+      for (const [id, count] of [['client-count', data.clientCount], ['project-count', data.projectCount], ['payment-count', data.paymentCount]]) {
+        document.getElementById(id)!.textContent = String(count);
+      }
+      renderList(lists[0], data.clients.map((client: { id: string; name: string }) => ({ text: client.name, href: `/clients/view?${resourceQuery('id', client.id)}` })));
+      renderList(lists[1], data.projects.map((project: { id: string; name: string }) => ({ text: project.name, href: `/projects/view?${resourceQuery('id', project.id)}` })));
+      const recent = [...data.payments as DashboardPayment[]].sort((first, second) =>
+        second.paidOn.localeCompare(first.paidOn) || (BigInt(second.id) > BigInt(first.id) ? 1 : -1));
+      renderList(lists[2], recent.slice(0, 4).map(paymentLabel));
+      filterCollections();
+      searchField.hidden = false;
       status.textContent = '';
+      dashboardRetry.hidden = true;
+      month.hidden = capture.hidden = false;
       void report(true);
       session.updateDeadline(response);
       account.hidden = false;
       void loadBalances();
       logout.hidden = false;
     } catch {
-      if (!current.signal.aborted) status.textContent = 'No se pudo cargar el tablero.';
+      if (!current.signal.aborted) {
+        status.textContent = 'No se pudo cargar el tablero.';
+        dashboardRetry.hidden = false;
+      }
     }
   }
   function clear() {
     request?.abort();
     clearBalances();
     account.hidden = true;
-    logout.hidden = true;
+    logout.hidden = month.hidden = capture.hidden = true;
+    dashboardRetry.hidden = true;
+    captureDialog.close();
+    captureProjects.replaceChildren();
+    projects = [];
+    searchField.hidden = true;
+    search.value = '';
+    monthlyPaidTotals = {};
+    chartBars.replaceChildren();
+    chartYear.textContent = '';
+    monthDialog.close();
+    monthCaption.textContent = 'Mes del reporte';
+    month.removeAttribute('aria-label');
+    for (const id of ['dashboard-period', 'month-count', 'active-clients', 'active-projects', 'client-count', 'project-count', 'payment-count']) {
+      document.getElementById(id)!.textContent = '';
+    }
     firstProject.hidden = true;
     total.textContent = '';
     reportRequest?.abort();
+    clearNetReport();
     reportTotal.textContent = '';
     reportPayments.replaceChildren();
     lists.forEach((list) => list.replaceChildren());
+  }
+  function reset() {
+    selectedMonth = '';
+    clear();
   }
   logout.addEventListener('click', async () => {
     logout.disabled = true;

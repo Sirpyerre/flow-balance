@@ -10,6 +10,9 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
   const [selectedPayment, setSelectedPayment] = useState<Payment>();
   const summary = useProjectPaymentSummary(active && (mode === 'edit' || mode === 'saved') ? payment.project.id : undefined);
   const draftPayment = selectedPayment ?? payment;
+  const originalCurrency = draftPayment.currency ?? 'MXN';
+  const [currency, setCurrency] = useState(payment.currency ?? 'MXN');
+  const currencyChanged = currency !== originalCurrency;
   const [source, setSource] = useState(payment.sourceType ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -54,7 +57,11 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
           version: draftPayment.version, signal: controller.signal });
         if (!controller.signal.aborted) location.assign(`/projects/view?${resourceQuery('id', payment.project.id)}`);
       } else {
-        const savedAttempt = attempt.current ?? { key: crypto.randomUUID(), body: { ...draft, sourceType: source || null } };
+        const savedAttempt = attempt.current ?? { key: crypto.randomUUID(), body: {
+          ...draft, sourceType: source || null, currency,
+          exchangeRate: currency === 'USD' ? draft.exchangeRate : null,
+          confirmCurrencyChange: currencyChanged && draft.confirmCurrencyChange === 'on',
+        } };
         attempt.current = savedAttempt;
         const corrected = await incomeRequest<Payment>(path, { ...savedAttempt, method: 'PATCH',
           version: draftPayment.version, signal: controller.signal });
@@ -102,6 +109,7 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
       <button ref={editButton} type="button" onClick={() => {
         setSelectedPayment(payment);
         setSource(payment.sourceType ?? '');
+        setCurrency(payment.currency ?? 'MXN');
         summary.refresh();
         setMode('edit');
       }} hidden={mode === 'edit' || mode === 'delete'}>Editar cobro</button>
@@ -114,26 +122,33 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
     {mode === 'edit' && <form onSubmit={submit} aria-label="Editar cobro">
       <ProjectPaymentSummary summary={summary} mode="edit" />
       <fieldset disabled={pending || retrying || conflict}>
-        <label>Importe abonado (MXN)<input autoFocus name="clientPaidAmount" inputMode="decimal" required defaultValue={draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1')} /></label>
+        <label>Moneda<select name="currency" value={currency} onChange={event => setCurrency(event.target.value)}>
+          {originalCurrency !== 'MXN' && originalCurrency !== 'USD' && <option value={originalCurrency}>{originalCurrency}</option>}
+          <option value="MXN">MXN</option><option value="USD">USD</option>
+        </select></label>
+        {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal"
+          defaultValue={currencyChanged ? '' : draftPayment.exchangeRate ?? ''} required /></label>}
+        {currencyChanged && <label className="currency-confirmation" key={currency}><input type="checkbox" name="confirmCurrencyChange" required /> Confirmo los importes en {currency}</label>}
+        <label>Importe abonado ({currency})<input autoFocus name="clientPaidAmount" inputMode="decimal" required defaultValue={draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1')} /></label>
         <label>Fecha de pago<input name="paidOn" type="date" defaultValue={draftPayment.paidOn} max={todayInMexico()} required /></label>
         <label>Fuente del cobro<select name="sourceType" value={source} onChange={event => setSource(event.target.value)}>
           {!draftPayment.sourceType && <option value="">Sin registrar</option>}
           <option value="direct_client">Cliente directo</option><option value="platform">Plataforma</option><option value="other">Otra</option>
         </select></label>
         {source !== '' && source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" defaultValue={draftPayment.sourceName ?? ''} required maxLength={100} /></label>}
-        <label>Comisión de plataforma (MXN)<input name="platformFee" inputMode="decimal" defaultValue={draftPayment.platformFee} required /></label>
-        <label>Impuestos descontados (MXN)<input name="withheldTaxAmount" inputMode="decimal" defaultValue={draftPayment.withheldTaxAmount} required /></label>
+        <label>Comisión de plataforma ({currency})<input name="platformFee" inputMode="decimal" defaultValue={draftPayment.platformFee} required /></label>
+        <label>Impuestos descontados ({currency})<input name="withheldTaxAmount" inputMode="decimal" defaultValue={draftPayment.withheldTaxAmount} required /></label>
         <label>Razón del excedente<input name="excessReason" maxLength={250} required={reasonRequired} /></label>
       </fieldset>
       {feedback}
       <div className="correction-actions">
-        <button type="submit" className="button primary" disabled={pending || conflict}>{retrying ? 'Reintentar guardado' : 'Guardar cambios'}</button>
+        <button type="submit" className="button primary" disabled={pending || conflict || !['MXN', 'USD'].includes(currency)}>{retrying ? 'Reintentar guardado' : 'Guardar cambios'}</button>
         <button type="button" onClick={close} disabled={pending}>Cancelar</button>
       </div>
     </form>}
     {active && mode === 'delete' && <dialog ref={dialog} aria-labelledby="delete-payment-title" onCancel={event => { event.preventDefault(); close(); }}>
       <h2 id="delete-payment-title">Eliminar cobro</h2>
-      <p>{amountLabel(draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'))} · {draftPayment.paidOn}</p>
+      <p>{amountLabel(draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'), originalCurrency)} · {draftPayment.paidOn}</p>
       {draftPayment.charges.length > 0 && <>
         <p>Estos cargos separados también dejarán de aparecer.</p>
         <ul>{draftPayment.charges.map(charge => <li key={charge.id}>

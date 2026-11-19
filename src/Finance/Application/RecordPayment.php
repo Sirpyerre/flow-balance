@@ -47,7 +47,7 @@ final readonly class RecordPayment
         return $existing['id'];
     }
     public function capture(string $userId, string $projectId, string $paidOn, string $key, PaymentAmounts $amounts,
-        string $sourceType, ?string $sourceName, ?string $reason): array
+        string $sourceType, ?string $sourceName, ?string $reason, string $currency = 'MXN', ?string $rate = null): array
     {
         $excess = new PaymentExcess($this->database);
         $project = $excess->project($userId, $projectId, true);
@@ -57,10 +57,14 @@ final readonly class RecordPayment
         // A key is account-wide, including when concurrent requests target different projects.
         $lock = $this->database->prepare("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))");
         $lock->execute(["payment:{$userId}:{$key}"]);
-        $fingerprint = hash('sha256', json_encode([
+        $input = [
             $projectId, $paidOn, $amounts->clientPaidAmount, $amounts->platformFee,
             $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason,
-        ], JSON_THROW_ON_ERROR));
+        ];
+        if ($currency !== 'MXN') {
+            array_push($input, $currency, $rate);
+        }
+        $fingerprint = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
         $existing = $this->database->prepare('SELECT id::text, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ? FOR UPDATE');
         $existing->execute([$userId, $key]);
         if ($row = $existing->fetch(PDO::FETCH_ASSOC)) {
@@ -72,16 +76,17 @@ final readonly class RecordPayment
             }
             return ['id' => $row['id'], 'created' => false];
         }
-        $projection = $excess->calculate($userId, $projectId, $project['agreed_amount'], $amounts->clientPaidAmount);
+        $projection = $excess->calculate($userId, $projectId, $project['agreed_amount'],
+            (new PaymentConversion($this->database))->equivalents($amounts, $currency, $rate)['clientPaidAmount']);
         if ($projection['requiresExcessReason'] && $reason === null) {
             throw new IncomeValidation('excessReason', 'Indica por qué el total supera el monto acordado.', $projection);
         }
         $insert = $this->database->prepare("INSERT INTO payments (user_id, project_id, client_paid_amount, currency,
-            paid_on, idempotency_key, request_fingerprint, platform_fee, withheld_tax_amount, source_type, source_name, excess_reason)
-            VALUES (?, ?, ?, 'MXN', ?, ?, ?, ?, ?, ?, ?, ?)
+            paid_on, idempotency_key, request_fingerprint, platform_fee, withheld_tax_amount, source_type, source_name, excess_reason, exchange_rate)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING id::text");
-        $insert->execute([$userId, $projectId, $amounts->clientPaidAmount, $paidOn, $key, $fingerprint,
-            $amounts->platformFee, $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason]);
+        $insert->execute([$userId, $projectId, $amounts->clientPaidAmount, $currency, $paidOn, $key, $fingerprint,
+            $amounts->platformFee, $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason, $rate]);
         $id = $insert->fetchColumn();
         if ($id === false) {
             throw new DomainException('La clave ya se usó para otro cobro.');

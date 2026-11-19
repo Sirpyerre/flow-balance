@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import { selectReportMonth } from './helpers/select-report-month';
 
 test('registers a project, records income and charges, and opens the monthly report on mobile', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL ?? 'https://flow-balance.test').origin;
@@ -98,8 +99,8 @@ test('registers a project, records income and charges, and opens the monthly rep
   await expect(page.getByText('Impuesto · 2025-12-03 · MXN 25.00')).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('link', { name: 'Volver al tablero' }).click();
-  await page.getByLabel('Mes del reporte').fill('2025-11');
-  await expect(page.locator('#report-total')).toHaveText('MXN 3000.00');
+  await selectReportMonth(page, '2025-11');
+  await expect(page.locator('#report-total')).toHaveText('MXN 3,000.00');
   await page.locator('#report-payments').getByRole('link').click();
   await expect(page.getByText('Comisión · 2025-12-02 · MXN 50.00')).toBeVisible();
   await context.setOffline(true);

@@ -19,12 +19,13 @@ final readonly class PaymentExcess
 
     public function calculate(string $userId, string $projectId, ?string $agreedAmount, string $amount, ?string $replaceId = null): array
     {
-        $query = $this->database->prepare('WITH projected AS (
-            SELECT round(COALESCE(SUM(client_paid_amount), 0) + CAST(? AS numeric), 2) AS total
-            FROM payments WHERE user_id = ? AND project_id = ? AND currency = \'MXN\'
+        $converted = PaymentConversion::PAYMENT_AMOUNT;
+        $query = $this->database->prepare("WITH projected AS (
+            SELECT round(COALESCE(SUM({$converted}), 0) + CAST(? AS numeric), 2) AS total
+            FROM payments WHERE user_id = ? AND project_id = ?
             AND deleted_at IS NULL AND id IS DISTINCT FROM CAST(? AS bigint)
         ) SELECT total::text, CASE WHEN CAST(? AS numeric) IS NULL THEN NULL
-            ELSE GREATEST(total - CAST(? AS numeric), 0.00)::text END AS excess FROM projected');
+            ELSE GREATEST(total - CAST(? AS numeric), 0.00)::text END AS excess FROM projected");
         $query->execute([$amount, $userId, $projectId, $replaceId, $agreedAmount, $agreedAmount]);
         $row = $query->fetch(PDO::FETCH_ASSOC);
         return [

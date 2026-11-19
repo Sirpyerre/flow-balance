@@ -33,11 +33,14 @@ export async function incomeRequest<T>(
   return data as T;
 }
 
-export const amountLabel = (amount: string) => `MXN ${amount}`;
+export const amountLabel = (amount: string, currency = 'MXN') => `${currency} ${amount}`;
 export const resourceQuery = (key: string, id: string) => new URLSearchParams({ [key]: id }).toString();
 
 export type Client = { id: string; name: string };
+export type PaymentCurrency = 'MXN' | 'USD';
+export type PaymentEquivalents = { clientPaidAmount: string; platformFee: string; withheldTaxAmount: string; receivedAmount: string };
 export type PaymentSummary = {
+  currency?: string; conversionPending?: boolean; clientPaidAmountMxn?: string | null;
   id: string; paidOn: string; clientPaidAmount: string; sourceType: string | null; sourceName: string | null;
 };
 export const collectionStatusLabel = {
@@ -49,6 +52,7 @@ export const collectionStatusLabel = {
 
 export type CollectionBalance = {
   outstandingBalance: string | null;
+  isBalanceProvisional?: boolean; unconvertedPaymentCount?: number;
   excessAmount: string | null;
   collectionStatus: keyof typeof collectionStatusLabel;
 };
@@ -57,17 +61,20 @@ export type ProjectBalanceRow = CollectionBalance & {
   projectId: string; name: string; currency: 'MXN'; agreedAmount: string | null; clientPaidTotal: string;
 };
 
-export type ProjectPaymentData = Pick<CollectionBalance, 'outstandingBalance'> & {
+export type ProjectPaymentData = Pick<CollectionBalance, 'outstandingBalance' | 'isBalanceProvisional' | 'unconvertedPaymentCount'> & {
   agreedPaymentCount: number | null; paymentCount: number;
 };
 
+export type DeliveryStatus = 'in_progress' | 'delivered';
+
 export type Project = CollectionBalance & ProjectPaymentData & {
   id: string; name: string; client: Client; agreedAmount: string | null; acquisitionSource: string | null;
-  clientPaidTotal: string; payments: PaymentSummary[];
+  deliveryStatus: DeliveryStatus | null; clientPaidTotal: string; payments: PaymentSummary[];
 };
 export type Charge = { id: string; chargeType: string; paidOn: string; amount: string };
 export type Payment = PaymentSummary & {
   version: string; project: Pick<Project, 'id' | 'name'>; client: Client; platformFee: string; withheldTaxAmount: string; receivedAmount: string;
+  exchangeRate?: string | null; equivalents?: PaymentEquivalents | null;
   excessReason: string | null; charges: Charge[]; excessAmount?: string | null;
 };
 
@@ -83,3 +90,14 @@ export function todayInMexico() {
   }).formatToParts(new Date());
   return ['year', 'month', 'day'].map(type => date.find(part => part.type === type)?.value).join('-');
 }
+
+export type MonthlyReport = {
+  clientPaidTotal: string; platformFeeTotal: string; taxTotal: string; netReceivedTotal: string;
+  unconvertedPaymentCount: number; payments: DashboardPayment[];
+  movements: {
+    paymentId: string; paidOn: string; kind: 'payment' | 'commission' | 'tax';
+    currency: string; originalPaidAmount: string; clientPaidAmount: string | null; netAmount: string | null;
+  }[];
+};
+
+export type DashboardPayment = Pick<PaymentSummary, 'id' | 'paidOn' | 'clientPaidAmount'> & { currency: string };

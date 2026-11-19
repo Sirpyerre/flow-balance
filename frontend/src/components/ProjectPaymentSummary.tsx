@@ -45,8 +45,9 @@ export default function ProjectPaymentSummary({ summary, mode }: {
     {data && <div aria-live="polite">
       {compact ? <CompactProgress data={data} /> : <>
         <Progress count={data.paymentCount} agreed={data.agreedPaymentCount} />
-        <p>Saldo pendiente <strong>{data.outstandingBalance === null ? 'Por determinar' : amountLabel(data.outstandingBalance)}</strong></p>
+        <p>{data.isBalanceProvisional ? 'Saldo pendiente provisional' : 'Saldo pendiente'} <strong>{data.outstandingBalance === null ? 'Por determinar' : amountLabel(data.outstandingBalance)}</strong></p>
       </>}
+      {Boolean(data.unconvertedPaymentCount) && <p>Hay cobros sin convertir a MXN.</p>}
       {mode === 'edit' && <p>Esta edición no cambia el número de pagos.</p>}
     </div>}
   </section>;
@@ -68,7 +69,7 @@ function CompactProgress({ data }: { data: ProjectPaymentData }) {
         </strong>
       </div>
       <div>
-        <span className="payment-summary-label">Saldo pendiente</span>
+        <span className="payment-summary-label">{data.isBalanceProvisional ? 'Saldo pendiente provisional' : 'Saldo pendiente'}</span>
         <strong>{balance === undefined ? 'Por determinar' : amountLabel(balance)}</strong>
       </div>
     </div>

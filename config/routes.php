@@ -3,9 +3,10 @@
 declare(strict_types=1);
 
 use FlowBalance\Finance\Infrastructure\PostgresAccountDataReader;
-use FlowBalance\Finance\Infrastructure\PostgresMonthlyReportReader;
+use FlowBalance\Finance\Http\MonthlyReportHandler;
 use FlowBalance\Finance\Http\OwnedResourceHandler;
 use FlowBalance\Finance\Http\PaymentCorrectionHandler;
+use FlowBalance\Finance\Http\PaymentListHandler;
 use FlowBalance\Finance\Http\ProjectBalanceReportHandler;
 use FlowBalance\Finance\Http\IncomeWriteHandler;
 use FlowBalance\Identity\Application\LoginUser;
@@ -19,6 +20,7 @@ use FlowBalance\Identity\Infrastructure\NativePasswordHasher;
 use FlowBalance\Identity\Infrastructure\PostgresSessionPersistence;
 use FlowBalance\Shared\Clock\SystemClock;
 use FlowBalance\Shared\Database\UnitOfWork;
+use FlowBalance\Shared\Http\ClientIpResolver;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Application;
 use Mezzio\Csrf\SessionCsrfGuard;
@@ -71,7 +73,10 @@ return static function (Application $app): void {
             return new JsonResponse(['error' => ['code' => 'configuration_unavailable', 'message' => 'Intenta de nuevo más tarde']], 503);
         }
         $service = new LoginUser($request->getAttribute(PDO::class), new NativePasswordHasher(), $secret);
-        return (new AuthRequestMiddleware($origin))->process($request, new LoginHandler($service, new SystemClock()));
+        return (new AuthRequestMiddleware($origin))->process($request, new LoginHandler($service, new SystemClock(), new ClientIpResolver(
+                array_map('trim', explode(',', getenv('TRUSTED_API_PROXY_PEERS') ?: ($_ENV['TRUSTED_API_PROXY_PEERS'] ?? ''))),
+                getenv('CLIENT_IP_PROXY_TOKEN') ?: ($_ENV['CLIENT_IP_PROXY_TOKEN'] ?? ''),
+            )));
     }]);
     $app->get('/api/auth/session', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
         $session = $request->getAttribute(SessionInterface::class);
@@ -123,19 +128,10 @@ return static function (Application $app): void {
             return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new LogoutHandler());
         },
     ]);
+    $app->get('/api/payments', [$transaction, $private, new PaymentListHandler()]);
     $app->get('/api/reports/project-balances', [$transaction, $private, new ProjectBalanceReportHandler()]);
-    $app->get('/api/reports/monthly', [$transaction, $private,
-        static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
-            $parameters = $request->getQueryParams();
-            $month = $parameters['month'] ?? '';
-            $currency = $parameters['currency'] ?? '';
-            if (!is_string($month) || !preg_match('/\A[1-9][0-9]{3}-(0[1-9]|1[0-2])\z/', $month) || $currency !== 'MXN') {
-                return new JsonResponse(['error' => ['code' => 'validation_failed', 'message' => 'Revisa el mes y la moneda']], 422);
-            }
-            $reader = new PostgresMonthlyReportReader($request->getAttribute(PDO::class));
-            return new JsonResponse($reader->read($request->getAttribute(SessionInterface::class)->get('userId'), $month, $currency));
-        },
-    ]);
+    $app->get('/api/reports/monthly', [$transaction, $private, new MonthlyReportHandler()]);
+    $app->get('/api/reports/monthly/export', [$transaction, $private, new MonthlyReportHandler(export: true)]);
     foreach ([
         '/api/clients' => 'client',
         '/api/projects' => 'project',

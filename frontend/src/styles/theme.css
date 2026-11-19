@@ -254,3 +254,22 @@ input[aria-invalid=true] { border-color: var(--rose); }
   .payment-entry-amounts > :first-child { grid-column: 1 / -1; }
   .payment-entry-actions > * { flex: 1; }
 }
+
+.app-content-wide { max-width: 82rem; margin-block: 1.5rem; padding-inline: clamp(1rem, 2vw, 2rem); }
+
+.project-delivery {
+  margin-top: 1rem;
+  padding: .875rem;
+  background: var(--base);
+  border: 1px solid var(--border);
+  border-radius: .625rem;
+}
+.project-delivery p { margin: 0; }
+.project-delivery form { grid-template-columns: minmax(0, 14rem) max-content; align-items: end; gap: .75rem; margin-bottom: 0; }
+.project-delivery button { min-height: 48px; }
+@media (max-width: 420px) {
+  .project-delivery form { grid-template-columns: minmax(0, 1fr); }
+}
+
+.currency-confirmation { display: flex; align-items: center; gap: .625rem; }
+.currency-confirmation input[type="checkbox"] { width: 1rem; min-height: 1rem; margin: 0; accent-color: var(--link); }

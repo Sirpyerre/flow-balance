@@ -39,12 +39,46 @@ final class IncomeMigrationTest extends TestCase
             foreach ([$projects, $payments, $charges] as $item) {
                 $item->up();
             }
+            $delivery = $migration('AddProjectDeliveryStatus', '20261119000200_add_project_delivery_status');
+            $delivery->up();
+            self::assertNull($database->query('SELECT delivery_status FROM projects WHERE id = 1')->fetchColumn());
+            $delivery->down();
+            $delivery->up();
+            $database->exec('SAVEPOINT recorded_delivery');
+            $newStatus = $database->query("INSERT INTO projects (user_id,client_id,name)
+                VALUES (1,1,'Nuevo') RETURNING delivery_status")->fetchColumn();
+            self::assertSame('in_progress', $newStatus);
+            try {
+                $delivery->down();
+                self::fail('Expected the delivery rollback guard');
+            } catch (RuntimeException $error) {
+                self::assertStringContainsString('Preserve recorded delivery states', $error->getMessage());
+            }
+            $database->exec('ROLLBACK TO SAVEPOINT recorded_delivery');
+            $delivery->down();
             $corrections = $migration('AddPaymentCorrections', '20261119000100_add_payment_corrections');
             $corrections->up();
             self::assertSame('1', $database->query('SELECT version::text FROM payments')->fetchColumn());
             self::assertNull($database->query('SELECT deleted_at FROM payments')->fetchColumn());
             $corrections->down();
             $corrections->up();
+            $conversion = $migration('AddPaymentExchangeRate', '20261119000300_add_payment_exchange_rate');
+            $database->exec("UPDATE payments SET currency = 'USD'");
+            $conversion->up();
+            self::assertNull($database->query('SELECT exchange_rate FROM payments')->fetchColumn());
+            self::assertNull($database->query('SELECT payment_amount_mxn(client_paid_amount, currency, exchange_rate) FROM payments')->fetchColumn());
+            $conversion->down();
+            $conversion->up();
+            $database->exec('UPDATE payments SET exchange_rate = 17.25');
+            self::assertSame('51750.00', $database->query('SELECT payment_amount_mxn(client_paid_amount, currency, exchange_rate)::text FROM payments')->fetchColumn());
+            try {
+                $conversion->down();
+                self::fail('Expected the rate rollback guard');
+            } catch (RuntimeException $error) {
+                self::assertStringContainsString('Preserve recorded exchange rates', $error->getMessage());
+            }
+            $database->exec("UPDATE payments SET exchange_rate = NULL, currency = 'MXN'");
+            $conversion->down();
             $revision = "INSERT INTO payment_revisions
                 (user_id, payment_id, actor_id, previous_version, result_version, action, previous_values, request_key, fingerprint)
                 VALUES (?,1,?, ?, ?, 'edit','{}','request',repeat('a',64))";

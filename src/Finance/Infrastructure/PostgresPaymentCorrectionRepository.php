@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace FlowBalance\Finance\Infrastructure;
 
 use FlowBalance\Finance\Application\IncomeNotFound;
+use FlowBalance\Finance\Application\PaymentAmounts;
+use FlowBalance\Finance\Application\PaymentConversion;
 use PDO;
 
 final readonly class PostgresPaymentCorrectionRepository
@@ -33,19 +35,20 @@ final readonly class PostgresPaymentCorrectionRepository
         return $payment;
     }
 
-    public function totals(array $payment, ?string $replacement): array
+    public function totals(array $payment, PaymentAmounts $amounts, string $currency, ?string $rate): array
     {
-        $amount = PostgresOwnedResourceRepository::BALANCE_PAYMENT_AMOUNT;
+        $amount = PaymentConversion::PAYMENT_AMOUNT;
+        $replacement = (new PaymentConversion($this->database))->equivalents($amounts, $currency, $rate)['clientPaidAmount'];
         $query = $this->database->prepare("SELECT COALESCE(SUM({$amount}), 0.00)::text AS previous,
             (COALESCE(SUM({$amount}) FILTER (WHERE id <> CAST(? AS bigint)), 0.00) + CAST(? AS numeric))::text AS projected
-            FROM payments WHERE user_id = ? AND project_id = ? AND currency = 'MXN' AND deleted_at IS NULL");
+            FROM payments WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL");
         $query->execute([$payment['id'], $replacement, $payment['user_id'], $payment['project_id']]);
         return $query->fetch(PDO::FETCH_ASSOC);
     }
 
     public function attempt(array $payment, string $key): ?array
     {
-        $query = $this->database->prepare('SELECT fingerprint, result_version::text FROM payment_revisions
+        $query = $this->database->prepare('SELECT fingerprint, result_version::text, previous_values::text FROM payment_revisions
             WHERE user_id = ? AND payment_id = ? AND request_key = ?');
         $query->execute([$payment['user_id'], $payment['id'], $key]);
         return $query->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -54,7 +57,7 @@ final readonly class PostgresPaymentCorrectionRepository
     public function change(array $payment, string $action, array $fields, ?string $reason = null, ?string $key = null, ?string $fingerprint = null): void
     {
         $previous = array_intersect_key($payment, array_flip([
-            'client_paid_amount', 'paid_on', 'source_type', 'source_name', 'platform_fee', 'withheld_tax_amount', 'excess_reason', 'currency',
+            'client_paid_amount', 'paid_on', 'source_type', 'source_name', 'platform_fee', 'withheld_tax_amount', 'excess_reason', 'currency', 'exchange_rate',
         ]));
         $audit = $this->database->prepare('INSERT INTO payment_revisions
             (user_id, payment_id, actor_id, previous_version, result_version, action, previous_values, reason, request_key, fingerprint)

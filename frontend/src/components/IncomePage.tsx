@@ -5,9 +5,10 @@ import IncomeSetupForm from './IncomeSetupForm';
 import PaymentForm from './PaymentForm';
 import PaymentCorrections from './PaymentCorrections';
 import PaymentChargeForm from './PaymentChargeForm';
+import ProjectDelivery from './ProjectDelivery';
 
-type Mode = 'client' | 'project' | 'project-detail' | 'payment' | 'payment-detail';
-type PageData = { clients?: Client[]; project?: Project; payment?: Payment };
+type Mode = 'client' | 'client-detail' | 'project' | 'project-detail' | 'payment' | 'payment-detail';
+type PageData = { client?: Client; clients?: Client[]; project?: Project; payment?: Payment };
 
 export default function IncomePage({ mode }: { mode: Mode }) {
   const [visible, setVisible] = useState(false);
@@ -38,6 +39,9 @@ export default function IncomePage({ mode }: { mode: Mode }) {
         const options = { signal: current.signal, passive: true };
         const id = encodeURIComponent(params.get(mode === 'payment' ? 'projectId' : 'id') ?? '0');
         let result: PageData = {};
+        if (mode === 'client-detail') {
+          result = { client: await incomeRequest<Client>(`/api/clients/${id}`, options) };
+        }
         if (mode === 'project') {
           const dashboard = await incomeRequest<{ clients: Client[] }>('/api/dashboard', options);
           result = { clients: dashboard.clients };
@@ -69,14 +73,18 @@ export default function IncomePage({ mode }: { mode: Mode }) {
   }, [mode]);
 
   const params = new URLSearchParams(query);
-  const { project, payment } = data ?? {};
+  const { client, project, payment } = data ?? {};
   return <>
     {(mode !== 'payment' || !visible) && <a className="income-back" href="/dashboard"><span aria-hidden="true">←</span> Volver al tablero</a>}
     <p id="status" role="status" hidden={visible}>{status || 'Verificando conexión…'}</p>
     <section className={mode.endsWith('-detail') ? 'income-panel income-detail-panel' : mode === 'payment' ? 'income-panel payment-entry-panel' : 'income-panel'} hidden={!visible} key={version}>
       {data && (mode === 'client' || mode === 'project') &&
         <IncomeSetupForm mode={mode} clients={data.clients ?? []} selected={params.get('clientId')} fromProject={params.get('from') === 'project'} />}
-      {mode === 'project-detail' && project && <ProjectDetail project={project} />}
+      {mode === 'client-detail' && client && <>
+        <h1>{client.name}</h1>
+        <a className="button primary" href={`/projects/new?${resourceQuery('clientId', client.id)}`}>Nuevo proyecto</a>
+      </>}
+      {mode === 'project-detail' && project && <ProjectDetail project={project} active={visible} />}
       {mode === 'payment' && project && <PaymentForm key={project.id} project={project} active={visible} />}
       {mode === 'payment-detail' && payment && <>
         <PaymentDetail payment={payment} />
@@ -95,12 +103,13 @@ export default function IncomePage({ mode }: { mode: Mode }) {
   </>;
 }
 
-function ProjectDetail({ project }: { project: Project }) {
+function ProjectDetail({ project, active }: { project: Project; active: boolean }) {
   return <>
     <header className="income-detail-header">
       <div><h1>{project.name}</h1><span className="income-status">{collectionStatusLabel[project.collectionStatus]}</span></div>
       <a className="button primary" href={`/payments/new?${resourceQuery('projectId', project.id)}`}>Registrar cobro</a>
     </header>
+    {active && <ProjectDelivery key={project.id} project={project} />}
     <dl className="income-details">
       <div><dt>Cliente</dt><dd>{project.client.name}</dd></div>
       <div><dt>Origen del proyecto</dt><dd>{project.acquisitionSource ?? 'Sin registrar'}</dd></div>
@@ -110,15 +119,17 @@ function ProjectDetail({ project }: { project: Project }) {
     <dl className="income-metrics">
       <div><dt>Monto acordado</dt><dd>{project.agreedAmount ? amountLabel(project.agreedAmount) : 'Sin registrar'}</dd></div>
       <div><dt>Total abonado</dt><dd>{amountLabel(project.clientPaidTotal)}</dd></div>
-      {project.outstandingBalance !== null && <div className="income-metric-primary"><dt>Saldo pendiente</dt><dd>{amountLabel(project.outstandingBalance)}</dd></div>}
+      {project.outstandingBalance !== null && <div className="income-metric-primary"><dt>{project.isBalanceProvisional ? 'Saldo pendiente provisional' : 'Saldo pendiente'}</dt><dd>{amountLabel(project.outstandingBalance)}</dd></div>}
       {project.collectionStatus === 'overpaid' && project.excessAmount !== null &&
         <div className="income-metric-primary"><dt>Excedente</dt><dd>{amountLabel(project.excessAmount)}</dd></div>}
     </dl>
     <h2 className="income-section-heading">Cobros</h2>
+    {Boolean(project.unconvertedPaymentCount) && <p>Hay cobros sin convertir. El saldo solo considera los importes con equivalente en MXN.</p>}
     {project.payments.length === 0 ? <p>Aún no hay cobros.</p> :
       <ul className="income-records" role="list">{project.payments.map(payment => <li key={payment.id}>
-        <a href={`/payments/view?${resourceQuery('id', payment.id)}`}>{payment.paidOn} · {amountLabel(payment.clientPaidAmount)}</a>
-        <span>{sourceLabel(payment, project.client.name)}</span>
+        <a href={`/payments/view?${resourceQuery('id', payment.id)}`}>{payment.paidOn} · {amountLabel(payment.clientPaidAmount, payment.currency)}</a>
+        <span>{sourceLabel(payment, project.client.name)}{payment.conversionPending && ' · Sin convertir'}
+          {payment.currency === 'USD' && payment.clientPaidAmountMxn && ` · Equivalente: ${amountLabel(payment.clientPaidAmountMxn)}`}</span>
       </li>)}</ul>}
   </>;
 }
@@ -136,11 +147,19 @@ function PaymentDetail({ payment }: { payment: Payment }) {
       <div><dt>Fuente</dt><dd>{sourceLabel(payment, payment.client.name)}</dd></div>
     </dl>
     <dl className="income-metrics">
-      <div><dt>Importe abonado</dt><dd>{amountLabel(payment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'))}</dd></div>
-      <div><dt>Comisión de plataforma</dt><dd>{amountLabel(payment.platformFee)}</dd></div>
-      <div><dt>Impuestos descontados</dt><dd>{amountLabel(payment.withheldTaxAmount)}</dd></div>
-      <div className="income-metric-primary"><dt>Dinero recibido al cobrar</dt><dd>{amountLabel(payment.receivedAmount)}</dd></div>
+      <div><dt>Importe abonado</dt><dd>{amountLabel(payment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'), payment.currency)}</dd></div>
+      <div><dt>Comisión de plataforma</dt><dd>{amountLabel(payment.platformFee, payment.currency)}</dd></div>
+      <div><dt>Impuestos descontados</dt><dd>{amountLabel(payment.withheldTaxAmount, payment.currency)}</dd></div>
+      <div className="income-metric-primary"><dt>Dinero recibido al cobrar</dt><dd>{amountLabel(payment.receivedAmount, payment.currency)}</dd></div>
     </dl>
+    {payment.conversionPending && <p>Este cobro está pendiente de conversión a MXN.</p>}
+    {payment.exchangeRate && payment.equivalents && <dl className="income-details">
+      <div><dt>Tipo de cambio aplicado</dt><dd>{payment.exchangeRate} MXN por USD</dd></div>
+      <div><dt>Importe abonado equivalente</dt><dd>{amountLabel(payment.equivalents.clientPaidAmount)}</dd></div>
+      <div><dt>Comisión equivalente</dt><dd>{amountLabel(payment.equivalents.platformFee)}</dd></div>
+      <div><dt>Impuestos equivalentes</dt><dd>{amountLabel(payment.equivalents.withheldTaxAmount)}</dd></div>
+      <div><dt>Dinero recibido equivalente</dt><dd>{amountLabel(payment.equivalents.receivedAmount)}</dd></div>
+    </dl>}
     {payment.excessReason && <dl className="income-details"><div><dt>Razón del excedente</dt><dd>{payment.excessReason}</dd></div></dl>}
     <h2 className="income-section-heading">Cargos pagados por separado</h2>
     {payment.charges.length === 0 ? <p>Aún no hay cargos.</p> :

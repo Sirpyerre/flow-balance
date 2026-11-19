@@ -18,7 +18,7 @@ final class OwnedResourceChanges
     {
         $allowed = match ($type) {
             'clients' => ['name'],
-            'projects' => ['name', 'clientId'],
+            'projects' => ['name', 'clientId', 'deliveryStatus'],
             'payments' => ['clientPaidAmount'],
         };
         if (!$data || array_diff(array_keys($data), $allowed)) {
@@ -36,6 +36,9 @@ final class OwnedResourceChanges
         }
         if (array_key_exists('clientId', $data) && !self::identifier($data['clientId'])) {
             throw new InvalidArgumentException('El cliente seleccionado no está disponible');
+        }
+        if (array_key_exists('deliveryStatus', $data) && !in_array($data['deliveryStatus'], ['in_progress', 'delivered'], true)) {
+            throw new InvalidArgumentException('Selecciona un estado de entrega válido');
         }
         if (array_key_exists('clientPaidAmount', $data)) {
             try {

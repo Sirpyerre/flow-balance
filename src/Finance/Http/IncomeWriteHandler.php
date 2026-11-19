@@ -12,6 +12,7 @@ use FlowBalance\Finance\Application\IncomeValidation;
 use FlowBalance\Finance\Application\OwnedResourceChanges;
 use FlowBalance\Finance\Application\PaymentAmounts;
 use FlowBalance\Finance\Application\PaymentExcess;
+use FlowBalance\Finance\Application\PaymentConversion;
 use FlowBalance\Finance\Application\PaymentInput;
 use FlowBalance\Finance\Application\RecordPayment;
 use FlowBalance\Finance\Application\RecordPaymentCharge;
@@ -89,15 +90,20 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
             throw new IncomeNotFound();
         }
         $amounts = new PaymentAmounts($body['clientPaidAmount'] ?? null, $body['platformFee'] ?? '0', $body['withheldTaxAmount'] ?? '0');
-        if ($this->operation === 'preview') {
-            return new JsonResponse(['receivedAmount' => $amounts->receivedAmount,
-                ...$excess->calculate($userId, $projectId, $project['agreed_amount'], $amounts->clientPaidAmount)]);
+        $currency = $body['currency'] ?? ($this->operation === 'preview' ? 'MXN' : null);
+        if (!in_array($currency, ['MXN', 'USD'], true)) {
+            throw new IncomeValidation('currency', 'Selecciona MXN o USD.');
         }
-        PaymentInput::currency($body['currency'] ?? null);
+        $rate = PaymentConversion::rate($currency, $body['exchangeRate'] ?? null);
+        if ($this->operation === 'preview') {
+            $equivalents = (new PaymentConversion($database))->equivalents($amounts, $currency, $rate);
+            return new JsonResponse(['receivedAmount' => $amounts->receivedAmount, 'currency' => $currency, 'equivalents' => $equivalents,
+                ...$excess->calculate($userId, $projectId, $project['agreed_amount'], $equivalents['clientPaidAmount'])]);
+        }
         $date = PaymentInput::date($body['paidOn'] ?? null);
         [$source, $sourceName] = PaymentInput::source($body);
         $reason = PaymentInput::optionalText($body['excessReason'] ?? null, 'excessReason');
-        $result = (new RecordPayment($database))->capture($userId, $projectId, $date, PaymentInput::key($key), $amounts, $source, $sourceName, $reason);
+        $result = (new RecordPayment($database))->capture($userId, $projectId, $date, PaymentInput::key($key), $amounts, $source, $sourceName, $reason, $currency, $rate);
         $detail = (new PostgresOwnedResourceRepository($database))->detail('payments', $userId, $result['id']);
         $created = $result['created'];
         unset($result['created']);

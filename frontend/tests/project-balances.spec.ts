@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { selectReportMonth } from './helpers/select-report-month';
 
 async function register(page: Page) {
   await page.goto('/register');
@@ -24,7 +25,7 @@ async function write(request: APIRequestContext, origin: string, path: string, d
 test('shows current balances, traces payments and keeps the monthly report independent', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin;
   await register(page);
-  const balances = page.getByRole('region', { name: 'Saldos vigentes por proyecto' });
+  const balances = page.getByRole('region', { name: 'Saldos por proyecto' });
   await expect(balances.getByText('Aún no tienes proyectos')).toBeVisible();
   const client = await write(page.request, origin, '/api/clients', { name: 'Estudio Norte' });
   const project = await write(page.request, origin, '/api/projects', {
@@ -37,12 +38,12 @@ test('shows current balances, traces payments and keeps the monthly report indep
   await page.reload();
   const filter = balances.getByLabel('Mostrar proyectos');
   await expect(filter).toHaveValue('outstanding');
-  await expect(balances.getByText('MXN 1200.00', { exact: true })).toBeVisible();
+  await expect(balances.getByText('MXN 1,200.00', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
-  for (const [month, total] of [['2025-11', '3000.00'], ['2025-12', '800.00']]) {
-    await page.getByLabel('Mes del reporte').fill(month);
+  for (const [month, total] of [['2025-11', '3,000.00'], ['2025-12', '800.00']]) {
+    await selectReportMonth(page, month);
     await expect(page.locator('#report-total')).toHaveText(`MXN ${total}`);
-    await expect(balances.getByText('MXN 1200.00', { exact: true })).toBeVisible();
+    await expect(balances.getByText('MXN 1,200.00', { exact: true })).toBeVisible();
   }
   await expect(balances.getByRole('link', { name: 'Identidad visual' })).toBeVisible();
   await balances.getByRole('link', { name: 'Identidad visual' }).click();
@@ -74,7 +75,7 @@ test('shows current balances, traces payments and keeps the monthly report indep
 
 test('retries a failed balance request and discards a late response after cleanup', async ({ page }) => {
   await register(page);
-  const balances = page.getByRole('region', { name: 'Saldos vigentes por proyecto' });
+  const balances = page.getByRole('region', { name: 'Saldos por proyecto' });
   await page.route('**/api/reports/project-balances', route => route.fulfill({ status: 503, body: '{}' }), { times: 1 });
   await page.reload();
   await expect(balances.getByText('No se pudieron cargar los saldos.')).toBeVisible();

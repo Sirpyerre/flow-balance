@@ -27,6 +27,40 @@ final class ProjectBalance
         ];
     }
 
+    public static function summarize(array $projects): array
+    {
+        $cents = '0';
+        $count = 0;
+        $excluded = 0;
+        foreach ($projects as $project) {
+            if (($project['unconvertedPaymentCount'] ?? 0) > 0) {
+                ++$excluded;
+                continue;
+            }
+            if ($project['collectionStatus'] !== 'outstanding') {
+                continue;
+            }
+            ++$count;
+            $digits = str_replace('.', '', $project['outstandingBalance']);
+            $left = strlen($cents) - 1;
+            $right = strlen($digits) - 1;
+            $carry = 0;
+            $reversed = '';
+            while ($left >= 0 || $right >= 0 || $carry !== 0) {
+                $sum = ($left >= 0 ? (int) $cents[$left--] : 0) + ($right >= 0 ? (int) $digits[$right--] : 0) + $carry;
+                $reversed .= (string) ($sum % 10);
+                $carry = intdiv($sum, 10);
+            }
+            $cents = strrev($reversed);
+        }
+        $cents = str_pad($cents, 3, '0', STR_PAD_LEFT);
+        return [
+            'totalOutstandingBalance' => (ltrim(substr($cents, 0, -2), '0') ?: '0') . '.' . substr($cents, -2),
+            'pendingProjectCount' => $count,
+            'excludedUnconvertedProjectCount' => $excluded,
+        ];
+    }
+
     private static function difference(string $greater, string $lesser): string
     {
         $borrow = 0;

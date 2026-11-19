@@ -21,6 +21,20 @@ final readonly class EditPayment
         if (!$legacy && !OwnedResourceChanges::identifier($version)) {
             throw new IncomeValidation('version', 'Vuelve a abrir el cobro antes de editarlo.');
         }
+        if ($legacy && $payment['currency'] !== 'MXN') {
+            throw new IncomeValidation('currency', 'Abre el formulario completo para corregir el cobro.');
+        }
+        $attempt = null;
+        $original = $payment;
+        if (!$legacy) {
+            $key = PaymentInput::key($key);
+            $attempt = $this->repository->attempt($payment, $key);
+            if ($attempt !== null) {
+                $original = [...$payment, ...json_decode($attempt['previous_values'], true, flags: JSON_THROW_ON_ERROR)];
+            } elseif ($version !== $payment['version']) {
+                throw new PaymentVersionConflict();
+            }
+        }
         $amounts = new PaymentAmounts(
             $body['clientPaidAmount'] ?? null,
             $legacy ? $payment['platform_fee'] : ($body['platformFee'] ?? null),
@@ -30,7 +44,7 @@ final readonly class EditPayment
         $reason = null;
         $fingerprint = null;
         if (!$legacy) {
-            if (array_diff(array_keys($body), ['clientPaidAmount', 'platformFee', 'withheldTaxAmount', 'paidOn', 'sourceType', 'sourceName', 'excessReason'])) {
+            if (array_diff(array_keys($body), ['clientPaidAmount', 'platformFee', 'withheldTaxAmount', 'paidOn', 'sourceType', 'sourceName', 'excessReason', 'currency', 'exchangeRate', 'confirmCurrencyChange'])) {
                 throw new IncomeValidation('payment', 'Revisa los campos indicados.');
             }
             [$source, $name] = PaymentInput::source($body, allowHistorical: true);
@@ -40,9 +54,21 @@ final readonly class EditPayment
                 'paid_on' => PaymentInput::date($body['paidOn'] ?? null),
                 'source_type' => $source, 'source_name' => $name,
             ];
-            $key = PaymentInput::key($key);
+            $currency = $body['currency'] ?? $original['currency'];
+            if (!in_array($currency, ['MXN', 'USD'], true) || !in_array($original['currency'], ['MXN', 'USD'], true)) {
+                throw new IncomeValidation('currency', 'Selecciona MXN o USD.');
+            }
+            $changedCurrency = $currency !== $original['currency'];
+            if ($changedCurrency && ($body['confirmCurrencyChange'] ?? false) !== true) {
+                throw new IncomeValidation('currency', 'Confirma los importes en la moneda de destino.');
+            }
+            $rate = PaymentConversion::rate($currency, $changedCurrency
+                ? ($body['exchangeRate'] ?? null)
+                : (array_key_exists('exchangeRate', $body) ? $body['exchangeRate'] : ($original['exchange_rate'] ?? null)));
+            if ($changedCurrency || $currency === 'USD') {
+                $fields += ['currency' => $currency, 'exchange_rate' => $rate];
+            }
             $fingerprint = hash('sha256', json_encode([$version, $fields, $reason], JSON_THROW_ON_ERROR));
-            $attempt = $this->repository->attempt($payment, $key);
             if ($attempt !== null) {
                 if (!hash_equals($attempt['fingerprint'], $fingerprint)) {
                     throw new DomainException('La clave ya se usó para otra corrección.');
@@ -52,11 +78,8 @@ final readonly class EditPayment
                 }
                 throw new PaymentVersionConflict();
             }
-            if ($version !== $payment['version']) {
-                throw new PaymentVersionConflict();
-            }
         }
-        $totals = $this->repository->totals($payment, $fields['client_paid_amount']);
+        $totals = $this->repository->totals($payment, $amounts, $currency ?? 'MXN', $rate ?? null);
         if (self::increasesExcess($payment['agreed_amount'], $totals['previous'], $totals['projected']) && $reason === null) {
             throw new IncomeValidation('excessReason', 'Indica por qué aumenta el excedente del proyecto.');
         }

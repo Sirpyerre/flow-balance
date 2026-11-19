@@ -8,6 +8,7 @@ use FlowBalance\Identity\Application\LoginUser;
 use FlowBalance\Identity\Domain\RegistrationInput;
 use FlowBalance\Identity\Domain\SessionPolicy;
 use FlowBalance\Shared\Clock\Clock;
+use FlowBalance\Shared\Http\ClientIpResolver;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -16,7 +17,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 final readonly class LoginHandler implements RequestHandlerInterface
 {
-    public function __construct(private LoginUser $login, private Clock $clock) {}
+    public function __construct(private LoginUser $login, private Clock $clock, private ClientIpResolver $clientIp) {}
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
@@ -30,7 +31,7 @@ final readonly class LoginHandler implements RequestHandlerInterface
             return new JsonResponse(['error' => ['code' => 'validation_failed', 'message' => 'Revisa los campos indicados', 'fields' => $fields]], 422);
         }
         $now = $this->clock->now();
-        $result = $this->login->login($email, $password, $request->getServerParams()['REMOTE_ADDR'] ?? '', $now);
+        $result = $this->login->login($email, $password, $this->clientIp->resolve($request), $now);
         if (isset($result['retryAfter'])) {
             return new JsonResponse(['error' => ['code' => 'login_temporarily_blocked',
                 'message' => 'Demasiados intentos. Intenta de nuevo en 15 minutos']], 429,

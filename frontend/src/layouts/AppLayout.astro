@@ -1,7 +1,7 @@
 ---
 import '@fontsource-variable/inter';
 import '../styles/theme.css';
-const { title, description, publicPage = false } = Astro.props;
+const { title, description, publicPage = false, wide = false } = Astro.props;
 ---
 <!doctype html>
 <html lang="es-MX">
@@ -16,7 +16,7 @@ const { title, description, publicPage = false } = Astro.props;
   </head>
   <body class:list={{ 'public-page': publicPage }}>
     <slot name="header" />
-    <main class:list={{ 'app-content': !publicPage }}><slot /></main>
+    <main class:list={{ 'app-content': !publicPage, 'app-content-wide': wide }}><slot /></main>
     <slot name="footer" />
   </body>
 </html>

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { amountLabel, IncomeError, incomeRequest, resourceQuery, todayInMexico, type Payment, type Project } from '../lib/income-api';
+import { amountLabel, IncomeError, incomeRequest, resourceQuery, todayInMexico, type Payment, type PaymentCurrency, type PaymentEquivalents, type Project } from '../lib/income-api';
 
 import ProjectPaymentSummary, { useProjectPaymentSummary } from './ProjectPaymentSummary';
 
-type Preview = { receivedAmount: string; excessAmount: string | null; requiresExcessReason: boolean };
+type Preview = { equivalents: PaymentEquivalents; receivedAmount: string; excessAmount: string | null; requiresExcessReason: boolean };
 
 export default function PaymentForm({ project, active }: { project: Project; active: boolean }) {
   const [amount, setAmount] = useState('');
   const [fee, setFee] = useState('');
   const [tax, setTax] = useState('');
+  const [currency, setCurrency] = useState<PaymentCurrency>('MXN');
+  const [exchangeRate, setExchangeRate] = useState('');
   const [source, setSource] = useState('direct_client');
   const [preview, setPreview] = useState<Preview>();
   const [error, setError] = useState<IncomeError>();
@@ -20,21 +22,21 @@ export default function PaymentForm({ project, active }: { project: Project; act
   const key = useRef<string>(undefined);
   const attempt = useRef<Record<string, unknown>>(undefined);
   const summary = useProjectPaymentSummary(active ? project.id : undefined, project);
-  const money = { projectId: project.id, clientPaidAmount: amount, platformFee: fee || '0', withheldTaxAmount: tax || '0' };
+  const money = { currency, exchangeRate: currency === 'USD' ? exchangeRate : null, projectId: project.id, clientPaidAmount: amount, platformFee: fee || '0', withheldTaxAmount: tax || '0' };
 
   useEffect(() => () => inFlight.current?.abort(), []);
   useEffect(() => {
     setPreview(undefined);
-    if (!amount || saved) return;
+    if (!amount || saved || (currency === 'USD' && !exchangeRate)) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void incomeRequest<Preview>('/api/payments/preview', {
-        body: { projectId: project.id, clientPaidAmount: amount, platformFee: fee || '0', withheldTaxAmount: tax || '0' },
+        body: money,
         signal: controller.signal, passive: true,
       }).then(result => { if (!controller.signal.aborted) setPreview(result); }).catch(() => {});
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [project.id, amount, fee, tax, saved]);
+  }, [project.id, amount, fee, tax, currency, exchangeRate, saved]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +45,7 @@ export default function PaymentForm({ project, active }: { project: Project; act
     const controller = new AbortController();
     inFlight.current = controller;
     key.current ??= crypto.randomUUID();
-    attempt.current ??= { ...fields, ...money, currency: 'MXN' };
+    attempt.current ??= { ...fields, ...money };
     setPending(true);
     setError(undefined);
     try {
@@ -92,13 +94,20 @@ export default function PaymentForm({ project, active }: { project: Project; act
           <option value="direct_client">Cliente directo</option><option value="platform">Plataforma</option><option value="other">Otra</option>
         </select></label>
         {source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" maxLength={100} required /></label>}
+        <label>Moneda<select name="currency" value={currency} onChange={event => setCurrency(event.target.value as PaymentCurrency)}>
+          <option value="MXN">MXN</option><option value="USD">USD</option>
+        </select></label>
+        {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal" value={exchangeRate} onChange={event => setExchangeRate(event.target.value)} required /></label>}
       </fieldset>
       <ProjectPaymentSummary summary={summary} mode="create" />
       <fieldset className="payment-entry-amounts" disabled={pending || retrying}>
-        <label>Importe (MXN)<input name="clientPaidAmount" placeholder="0.00" inputMode="decimal" value={amount} onChange={event => { setAmount(event.target.value); setError(undefined); }} required /></label>
-        <label>Comisión<input name="platformFee" inputMode="decimal" value={fee} onChange={event => setFee(event.target.value)} placeholder="0.00" /></label>
-        <label>Impuestos<input name="withheldTaxAmount" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} placeholder="0.00" /></label>
-        {preview && <output>Dinero recibido al cobrar: {amountLabel(preview.receivedAmount)}</output>}
+        <label>Importe ({currency})<input name="clientPaidAmount" placeholder="0.00" inputMode="decimal" value={amount} onChange={event => { setAmount(event.target.value); setError(undefined); }} required /></label>
+        <label>Comisión{currency === 'USD' && ' (USD)'}<input name="platformFee" inputMode="decimal" value={fee} onChange={event => setFee(event.target.value)} placeholder="0.00" /></label>
+        <label>Impuestos{currency === 'USD' && ' (USD)'}<input name="withheldTaxAmount" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} placeholder="0.00" /></label>
+        {preview && <output>Dinero recibido al cobrar: {amountLabel(preview.receivedAmount, currency)}
+          {currency === 'USD' && preview.equivalents && <><br />Importe abonado equivalente: {amountLabel(preview.equivalents.clientPaidAmount)}
+            <br />Dinero recibido equivalente: {amountLabel(preview.equivalents.receivedAmount)}</>}
+        </output>}
         <div hidden={!excess}>
           {excess && <p>El total supera el monto acordado en {amountLabel(excess)}.</p>}
           <label>Razón del excedente<textarea name="excessReason" maxLength={250} disabled={!excess} required={Boolean(excess)} /></label>

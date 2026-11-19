@@ -241,7 +241,8 @@ final class AccountAccessTest extends TestCase
         try {
             $reportPath = '/api/reports/project-balances';
             self::assertSame(401, $this->request($app, 'GET', $reportPath, '')[0]);
-            self::assertSame(['projects' => []], $this->request($app, 'GET', $reportPath, $other)[1]);
+            self::assertSame(['projects' => [], 'totalOutstandingBalance' => '0.00', 'pendingProjectCount' => 0, 'excludedUnconvertedProjectCount' => 0],
+                $this->request($app, 'GET', $reportPath, $other)[1]);
 
             $client = (new CreateClient($database))->create($ana, 'Estudio Norte');
             $projects = new CreateProject($database);
@@ -266,6 +267,18 @@ final class AccountAccessTest extends TestCase
             $raw = $database->prepare('SELECT DISTINCT client_paid_amount::text FROM payments WHERE project_id = ?');
             $raw->execute([$fraction]);
             self::assertSame(['0.015000'], $raw->fetchAll(PDO::FETCH_COLUMN));
+
+            self::assertSame('in_progress', $this->request($app, 'GET', $detailPath, $cookie)[1]['deliveryStatus']);
+            $database->prepare('UPDATE projects SET delivery_status = NULL WHERE id = ?')->execute([$historic]);
+            self::assertNull($this->request($app, 'GET', "/api/projects/{$historic}", $cookie)[1]['deliveryStatus']);
+            self::assertSame(403, $this->request($app, 'PATCH', $detailPath, $cookie, ['deliveryStatus' => 'delivered'])[0]);
+            self::assertSame(404, $this->write($app, $detailPath, ['deliveryStatus' => 'delivered'], $other, method: 'PATCH')[0]);
+            self::assertSame(422, $this->write($app, $detailPath, ['deliveryStatus' => 'invalid'], $cookie, method: 'PATCH')[0]);
+            self::assertSame(200, $this->write($app, $detailPath, ['deliveryStatus' => 'delivered'], $cookie, method: 'PATCH')[0]);
+            $delivered = $this->request($app, 'GET', $detailPath, $cookie)[1];
+            self::assertSame('delivered', $delivered['deliveryStatus']);
+            self::assertSame('outstanding', $delivered['collectionStatus']);
+            self::assertSame('5000.00', $delivered['outstandingBalance']);
 
             $input = ['projectId' => $project, 'paidOn' => '2025-11-30', 'currency' => 'MXN',
                 'sourceType' => 'direct_client', 'clientPaidAmount' => '3000', 'platformFee' => '150', 'withheldTaxAmount' => '50'];
@@ -298,12 +311,33 @@ final class AccountAccessTest extends TestCase
             self::assertSame(3, $summary['paymentCount']);
             self::assertSame(3, $summary['agreedPaymentCount']);
             self::assertSame($afterCommit['outstandingBalance'], $summary['outstandingBalance']);
-            self::assertSame($afterCommit['payments'], $summary['payments']);
+            self::assertTrue($summary['isBalanceProvisional']);
+            self::assertSame(1, $summary['unconvertedPaymentCount']);
+            self::assertSame($afterCommit['payments'], array_values(array_filter($summary['payments'], static fn (array $payment): bool => !$payment['conversionPending'])));
+            $historical = array_values(array_filter($summary['payments'], static fn (array $payment): bool => $payment['conversionPending']))[0];
+            $historicalDetail = $this->request($app, 'GET', '/api/payments/' . $historical['id'], $cookie)[1];
+            self::assertNull($historicalDetail['equivalents']);
+            self::assertSame('USD', $historicalDetail['currency']);
 
             [$status, $report, , $headers] = $this->request($app, 'GET', $reportPath, $cookie);
             self::assertSame(200, $status);
             self::assertStringContainsString('no-store', $headers);
             self::assertSame([$project, $sameName, $fraction, $historic], array_column($report['projects'], 'projectId'));
+            self::assertSame('5000.26', $report['totalOutstandingBalance']);
+            self::assertSame(2, $report['pendingProjectCount']);
+            self::assertSame(1, $report['excludedUnconvertedProjectCount']);
+            $dashboard = $this->request($app, 'GET', '/api/dashboard', $cookie)[1];
+            self::assertSame(1, $dashboard['activeClientCount']);
+            self::assertSame(4, $dashboard['projectCount']);
+            self::assertSame(5, $dashboard['paymentCount']);
+            [$listStatus, $list, , $listHeaders] = $this->request($app, 'GET', '/api/payments?limit=2', $cookie);
+            self::assertSame(200, $listStatus);
+            self::assertStringContainsString('no-store', $listHeaders);
+            self::assertCount(2, $list['payments']);
+            $next = $this->request($app, 'GET', '/api/payments?limit=2&cursor=' . urlencode($list['nextCursor']), $cookie)[1];
+            self::assertEmpty(array_intersect(array_column($list['payments'], 'id'), array_column($next['payments'], 'id')));
+            self::assertSame(['payments' => [], 'nextCursor' => null], $this->request($app, 'GET', '/api/payments', $other)[1]);
+            self::assertSame(422, $this->request($app, 'GET', '/api/payments?cursor=bad', $cookie)[0]);
             foreach (['outstandingBalance', 'excessAmount', 'clientPaidTotal', 'collectionStatus'] as $field) {
                 self::assertSame($afterCommit[$field], $report['projects'][0][$field]);
             }
@@ -317,7 +351,10 @@ final class AccountAccessTest extends TestCase
             self::assertSame([$project, $sameName, $fraction, $historic], array_column(
                 $this->request($app, 'GET', $reportPath, $cookie)[1]['projects'], 'projectId',
             ));
-            self::assertSame('3000.03', $this->request($app, 'GET', '/api/reports/monthly?month=2025-11&currency=MXN', $cookie)[1]['clientPaidTotal']);
+            $monthly = $this->request($app, 'GET', '/api/reports/monthly?month=2025-11&currency=MXN', $cookie)[1];
+            self::assertSame('3000.03', $monthly['clientPaidTotal']);
+            self::assertSame(1, $monthly['unconvertedPaymentCount']);
+            self::assertNull(array_column($monthly['movements'], null, 'paymentId')[$historical['id']]['netAmount']);
             self::assertSame('800.00', $this->request($app, 'GET', '/api/reports/monthly?month=2025-12&currency=MXN', $cookie)[1]['clientPaidTotal']);
 
             $december = [...$input, 'paidOn' => '2025-12-02', 'platformFee' => '0', 'withheldTaxAmount' => '0'];
@@ -451,6 +488,121 @@ final class AccountAccessTest extends TestCase
         }
     }
 
+    public function testCurrencyCorrectionsAndMonthlyNetExport(): void
+    {
+        if (getenv('TEST_DB_PASSWORD') === false) {
+            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+        }
+        $root = dirname(__DIR__, 2);
+        $container = require $root . '/config/container.php';
+        $app = $container->get(Application::class);
+        (require $root . '/config/pipeline.php')($app, $container->get(MiddlewareFactory::class));
+        (require $root . '/config/routes.php')($app);
+        $database = (require $root . '/config/database.php')->connect();
+        $suffix = bin2hex(random_bytes(8));
+        [$ana, $cookie] = $this->register($app, 'Ana', "currency-{$suffix}@example.test", 'Una contraseña exacta');
+        [$luis, $other] = $this->register($app, 'Luis', "other-currency-{$suffix}@example.test", 'Una contraseña exacta');
+
+        try {
+            $client = (new CreateClient($database))->create($ana, 'Cliente');
+            $project = (new CreateProject($database))->create($ana, $client, 'Proyecto', ['5000.00', 'MXN', 3, 'Directo']);
+            $usd = ['currency' => 'USD', 'exchangeRate' => '17.250000', 'clientPaidAmount' => '100',
+                'platformFee' => '5', 'withheldTaxAmount' => '3', 'paidOn' => '2025-11-30', 'sourceType' => 'direct_client'];
+            $capture = [...$usd, 'projectId' => $project];
+            [$status, $preview] = $this->write($app, '/api/payments/preview', $capture, $cookie);
+            self::assertSame(200, $status);
+            self::assertSame(['clientPaidAmount' => '1725.00', 'platformFee' => '86.25',
+                'withheldTaxAmount' => '51.75', 'receivedAmount' => '1587.00'], $preview['equivalents']);
+            [$status, $rounded] = $this->write($app, '/api/payments/preview', [...$capture, 'exchangeRate' => '0.5',
+                'clientPaidAmount' => '0.03', 'platformFee' => '0.01', 'withheldTaxAmount' => '0.02'], $cookie);
+            self::assertSame(200, $status);
+            self::assertSame(['clientPaidAmount' => '0.02', 'platformFee' => '0.01',
+                'withheldTaxAmount' => '0.01', 'receivedAmount' => '0.00'], $rounded['equivalents']);
+            foreach (['0', '-1', '17.1234567', '1e1', 17] as $invalid) {
+                self::assertSame(422, $this->write($app, '/api/payments/preview', [...$capture, 'exchangeRate' => $invalid], $cookie)[0]);
+            }
+
+            [$status, $payment] = $this->write($app, '/api/payments', $capture, $cookie, key: 'usd-capture');
+            self::assertSame(201, $status);
+            self::assertSame('17.25', $payment['exchangeRate']);
+            $path = '/api/payments/' . $payment['id'];
+            self::assertSame(200, $this->write($app, '/api/payments', [...$capture, 'exchangeRate' => '17.25'], $cookie, key: 'usd-capture')[0]);
+            self::assertSame(404, $this->request($app, 'GET', $path, $other)[0]);
+
+            $sameCurrency = [...$usd, 'paidOn' => '2025-12-01'];
+            unset($sameCurrency['exchangeRate']);
+            [$status, $edited] = $this->write($app, $path, $sameCurrency, $cookie, 'PATCH', 'keep-rate', '"1"');
+            self::assertSame(200, $status);
+            self::assertSame('17.25', $edited['exchangeRate']);
+            $moved = $this->request($app, 'GET', '/api/reports/monthly?currency=MXN&month=2025-12', $cookie)[1];
+            self::assertSame('1725.00', $moved['clientPaidTotal']);
+            self::assertSame('1587.00', $moved['netReceivedTotal']);
+            $mxn = [...$usd, 'currency' => 'MXN', 'exchangeRate' => null, 'clientPaidAmount' => '1500',
+                'platformFee' => '100', 'withheldTaxAmount' => '50'];
+            self::assertSame(403, $this->request($app, 'PATCH', $path, $cookie, $mxn)[0]);
+            self::assertSame(404, $this->write($app, $path, $mxn, $other, 'PATCH', 'other-edit', '"2"')[0]);
+            self::assertSame(422, $this->write($app, $path, $mxn, $cookie, 'PATCH', 'to-mxn', '"2"')[0]);
+            $mxn['confirmCurrencyChange'] = true;
+            [$status, $changed] = $this->write($app, $path, $mxn, $cookie, 'PATCH', 'to-mxn', '"2"');
+            self::assertSame(200, $status);
+            self::assertNull($changed['exchangeRate']);
+            self::assertSame(200, $this->write($app, $path, $mxn, $cookie, 'PATCH', 'to-mxn', '"2"')[0]);
+            self::assertSame(412, $this->write($app, $path, $mxn, $cookie, 'PATCH', 'stale', '"2"')[0]);
+            $replayed = $this->write($app, '/api/payments', $capture, $cookie, key: 'usd-capture')[1];
+            self::assertSame([$payment['id'], 'MXN'], [$replayed['id'], $replayed['currency']]);
+            $audit = $database->prepare("SELECT previous_values->>'exchange_rate' FROM payment_revisions WHERE payment_id = ? AND result_version = 3");
+            $audit->execute([$payment['id']]);
+            self::assertSame('17.25', $audit->fetchColumn());
+
+            $charge = ['paidOn' => '2025-12-01', 'chargeType' => 'tax', 'amount' => '75', 'currency' => 'MXN'];
+            self::assertSame(201, $this->write($app, "$path/charges", $charge, $cookie, key: 'separate')[0]);
+            $november = '/api/reports/monthly?currency=MXN&month=2025-11';
+            $december = '/api/reports/monthly?currency=MXN&month=2025-12';
+            $export = '/api/reports/monthly/export?currency=MXN&month=2025-12';
+            $report = $this->request($app, 'GET', $november, $cookie)[1];
+            self::assertSame(['1500.00', '100.00', '50.00', '1350.00'],
+                [$report['clientPaidTotal'], $report['platformFeeTotal'], $report['taxTotal'], $report['netReceivedTotal']]);
+            $report = $this->request($app, 'GET', $december, $cookie)[1];
+            self::assertSame('-75.00', $report['netReceivedTotal']);
+            self::assertSame([$payment['id']], array_column($report['movements'], 'paymentId'));
+            [$status, $csv, , $headers] = $this->request($app, 'GET', $export, $cookie);
+            self::assertSame(200, $status);
+            self::assertStringContainsString('no-store', $headers);
+            $row = str_getcsv(explode("\n", $csv)[1], escape: '');
+            self::assertSame(['2025-12', '2025-12-01', 'Impuesto pagado por separado', $payment['id']], array_slice($row, 0, 4));
+            self::assertSame($report['movements'][0]['netAmount'], $row[13]);
+            self::assertSame(401, $this->request($app, 'GET', $export, '')[0]);
+            self::assertCount(1, explode("\n", trim($this->request($app, 'GET', $export, $other)[1])));
+
+            $newUsd = [...$usd, 'confirmCurrencyChange' => true];
+            self::assertSame(422, $this->write($app, $path, $sameCurrency + ['confirmCurrencyChange' => true], $cookie, 'PATCH', 'usd-again', '"4"')[0]);
+            [$status, $changed] = $this->write($app, $path, $newUsd, $cookie, 'PATCH', 'usd-again', '"4"');
+            self::assertSame(200, $status);
+            self::assertSame('17.25', $changed['exchangeRate']);
+            self::assertCount(1, $changed['charges']);
+            self::assertSame(200, $this->write($app, $path, $newUsd, $cookie, 'PATCH', 'usd-again', '"4"')[0]);
+            self::assertSame(204, $this->write($app, $path, [], $cookie, 'DELETE', version: '"5"')[0]);
+            self::assertSame([], $this->request($app, 'GET', $december, $cookie)[1]['movements']);
+
+            $insert = $database->prepare("INSERT INTO payments
+                (user_id, project_id, client_paid_amount, currency, paid_on, idempotency_key, request_fingerprint)
+                VALUES (?, ?, 100, 'USD', '2025-11-30', 'legacy-usd', repeat('c', 64)) RETURNING id::text");
+            $insert->execute([$ana, $project]);
+            $legacyPath = '/api/payments/' . $insert->fetchColumn();
+            $balances = '/api/reports/project-balances';
+            self::assertSame(1, $this->request($app, 'GET', $balances, $cookie)[1]['excludedUnconvertedProjectCount']);
+            self::assertSame(200, $this->write($app, $legacyPath, [...$usd, 'exchangeRate' => '18'], $cookie, 'PATCH', 'resolve', '"1"')[0]);
+            $summary = $this->request($app, 'GET', $balances, $cookie)[1];
+            self::assertSame(0, $summary['excludedUnconvertedProjectCount']);
+            self::assertSame('3200.00', $summary['totalOutstandingBalance']);
+        } finally {
+            foreach (['payment_revisions', 'payment_charges', 'payments', 'projects', 'clients', 'server_sessions'] as $table) {
+                $database->prepare("DELETE FROM {$table} WHERE user_id IN (?, ?)")->execute([$ana, $luis]);
+            }
+            $database->prepare('DELETE FROM users WHERE id IN (?, ?)')->execute([$ana, $luis]);
+        }
+    }
+
     private function payment(PDO $database, string $userId, string $amount): string
     {
         $client = (new CreateClient($database))->create($userId, 'Cliente');
@@ -482,7 +634,39 @@ final class AccountAccessTest extends TestCase
         return $this->request($app, $method, $path, $cookie, $data, $challenge['csrfToken'], $key, $version);
     }
 
-    private function request(Application $app, string $method, string $path, string $cookie, ?array $data = null, string $csrf = '', string $key = '', string $version = ''): array
+    public function testLoginThrottleSeparatesAuthenticatedProxyOrigins(): void
+    {
+        if (getenv('TEST_DB_PASSWORD') === false) {
+            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+        }
+        $oldPeers = getenv('TRUSTED_API_PROXY_PEERS');
+        $oldToken = getenv('CLIENT_IP_PROXY_TOKEN');
+        putenv('TRUSTED_API_PROXY_PEERS=127.0.0.1');
+        putenv('CLIENT_IP_PROXY_TOKEN=integration-proxy-token');
+        try {
+            $root = dirname(__DIR__, 2);
+            $container = require $root . '/config/container.php';
+            $app = $container->get(Application::class);
+            (require $root . '/config/pipeline.php')($app, $container->get(MiddlewareFactory::class));
+            (require $root . '/config/routes.php')($app);
+            $credentials = ['email' => bin2hex(random_bytes(8)) . '@example.test', 'password' => 'A test password'];
+            $login = function (string $origin) use ($app, $credentials): int {
+                [, $challenge, $cookie] = $this->request($app, 'GET', '/api/auth/csrf', '');
+                return $this->request($app, 'POST', '/api/auth/login', $cookie, $credentials,
+                    $challenge['csrfToken'], headers: ['X-Flow-Proxy-Token' => 'integration-proxy-token', 'X-Flow-Client-IP' => $origin])[0];
+            };
+            for ($attempt = 0; $attempt < 4; ++$attempt) {
+                self::assertSame(401, $login('192.0.2.10'));
+            }
+            self::assertSame(429, $login('192.0.2.10'));
+            self::assertSame(401, $login('192.0.2.11'));
+        } finally {
+            putenv($oldPeers === false ? 'TRUSTED_API_PROXY_PEERS' : 'TRUSTED_API_PROXY_PEERS=' . $oldPeers);
+            putenv($oldToken === false ? 'CLIENT_IP_PROXY_TOKEN' : 'CLIENT_IP_PROXY_TOKEN=' . $oldToken);
+        }
+    }
+
+    private function request(Application $app, string $method, string $path, string $cookie, ?array $data = null, string $csrf = '', string $key = '', string $version = '', array $headers = []): array
     {
         $body = new Stream('php://temp', 'wb+');
         if ($data !== null) {
@@ -492,6 +676,9 @@ final class AccountAccessTest extends TestCase
         $request = new ServerRequest(['REMOTE_ADDR' => '127.0.0.1'], [], self::ORIGIN . $path, $method, $body);
         parse_str((string) parse_url($path, PHP_URL_QUERY), $query);
         $request = $request->withQueryParams($query);
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
         if ($cookie !== '') {
             $request = $request->withCookieParams(['__Host-flow_balance' => $cookie]);
         }
@@ -510,6 +697,8 @@ final class AccountAccessTest extends TestCase
         if (preg_match('/^__Host-flow_balance=([a-f0-9]{64});/', $response->getHeaderLine('Set-Cookie'), $match)) {
             $cookie = $match[1];
         }
-        return [$response->getStatusCode(), json_decode((string) $response->getBody(), true), $cookie, $response->getHeaderLine('Cache-Control')];
+        $content = (string) $response->getBody();
+        $result = str_starts_with($response->getHeaderLine('Content-Type'), 'text/csv') ? $content : json_decode($content, true);
+        return [$response->getStatusCode(), $result, $cookie, $response->getHeaderLine('Cache-Control')];
     }
 }

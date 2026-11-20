@@ -1,0 +1,8 @@
+---
+// Loading, empty or error message. Errors are announced as alerts; the other kinds as polite status.
+const { kind = 'empty', title, id, hidden = false } = Astro.props as { kind?: 'loading' | 'empty' | 'error'; title?: string; id?: string; hidden?: boolean };
+---
+<div class:list={['state', `state-${kind}`]} id={id} role={kind === 'error' ? 'alert' : 'status'} aria-busy={kind === 'loading' ? 'true' : undefined} hidden={hidden}>
+  {title && <p class="state-title">{title}</p>}
+  <slot />
+</div>

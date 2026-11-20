@@ -1,16 +1,16 @@
 ---
 const { collection } = Astro.props as { collection: 'clients' | 'projects' };
 const isClient = collection === 'clients';
+import StateMessage from './StateMessage.astro';
+import PageHeader from './PageHeader.astro';
 ---
-<section class="income-workspace" data-collection={collection}>
-  <a class="income-back" href="/dashboard">Volver al tablero</a>
-  <header class="workspace-heading">
-    <h1>{isClient ? 'Clientes' : 'Proyectos'}</h1>
+<section class="page-workspace" data-collection={collection}>
+  <PageHeader title={isClient ? 'Clientes' : 'Proyectos'} subtitleId="collection-count" backHref="/dashboard" backLabel="Volver al tablero">
     <a class="button primary" href={`/${collection}/new`}>{isClient ? 'Nuevo cliente' : 'Nuevo proyecto'}</a>
-  </header>
-  <p id="status" role="status">Verificando tu sesión…</p>
+  </PageHeader>
+  <StateMessage kind="loading" id="status"><span>Verificando tu sesión…</span></StateMessage>
   <button class="button" type="button" hidden>Reintentar</button>
-  <ul class="income-panel income-records" role="list" hidden></ul>
+  <ul class="card page-card record-list" role="list" hidden></ul>
 </section>
 <script>
   import { incomeRequest, resourceQuery, type Client } from '../lib/income-api';
@@ -20,15 +20,27 @@ const isClient = collection === 'clients';
   const collection = panel.dataset.collection === 'projects' ? 'projects' : 'clients';
   const status = panel.querySelector<HTMLElement>('[role="status"]')!;
   const list = panel.querySelector('ul')!;
+  const count = document.getElementById('collection-count')!;
+  const noun = collection === 'clients' ? ['cliente', 'clientes'] : ['proyecto', 'proyectos'];
   const retry = panel.querySelector('button')!;
   const collator = new Intl.Collator('es-MX', { sensitivity: 'base' });
   let request: AbortController | undefined;
+
+  // Keeps the Astro-rendered .state element in sync with the load lifecycle.
+  function setState(kind: 'loading' | 'empty' | 'error', text: string) {
+    status.className = `state state-${kind}`;
+    status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    if (kind === 'loading') status.setAttribute('aria-busy', 'true');
+    else status.removeAttribute('aria-busy');
+    status.textContent = text;
+  }
 
   function clear() {
     request?.abort();
     list.hidden = retry.hidden = true;
     list.replaceChildren();
-    status.textContent = 'Verificando tu sesión…';
+    count.textContent = '';
+    setState('loading', 'Verificando tu sesión…');
   }
   async function load() {
     clear();
@@ -39,7 +51,9 @@ const isClient = collection === 'clients';
       if (current.signal.aborted) return;
       const clients = new Map(data.clients.map(client => [client.id, client.name]));
       const rows = data[collection].slice().sort((first, second) => collator.compare(first.name, second.name));
-      status.textContent = rows.length ? '' : collection === 'clients' ? 'Aún no tienes clientes.' : 'Aún no tienes proyectos.';
+      count.textContent = `${rows.length} ${noun[rows.length === 1 ? 0 : 1]}`;
+      if (rows.length) setState('empty', '');
+      else setState('empty', collection === 'clients' ? 'Aún no tienes clientes.' : 'Aún no tienes proyectos.');
       for (const row of rows) {
         const item = document.createElement('li');
         const link = document.createElement('a');
@@ -56,7 +70,7 @@ const isClient = collection === 'clients';
       list.hidden = rows.length === 0;
     } catch {
       if (current.signal.aborted) return;
-      status.textContent = 'No se pudo cargar el listado.';
+      setState('error', 'No se pudo cargar el listado.');
       retry.hidden = false;
     }
   }

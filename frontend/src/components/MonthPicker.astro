@@ -2,7 +2,7 @@
 const monthNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
 const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' });
 ---
-  <dialog id="month-dialog" aria-labelledby="month-dialog-title">
+  <dialog class="dialog" id="month-dialog" aria-labelledby="month-dialog-title">
     <h2 id="month-dialog-title">Mes del reporte</h2>
     <p class="period-note">Elige el mes que quieres revisar.</p>
     <div class="period-year">

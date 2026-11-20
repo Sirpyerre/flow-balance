@@ -39,8 +39,8 @@ export default function RegisterForm() {
   return <form method="post" onSubmit={submit} aria-busy={pending} noValidate>
     {fields.map(field => <AuthField key={field.name} {...field} error={error?.fields?.[field.name]} />)}
     {error?.message && <p role="alert">{error.message}</p>}
-    <button type="submit" disabled={pending} aria-label={pending ? 'Procesando solicitud' : undefined}>
-      {pending ? <span className="spinner" aria-hidden="true" /> : 'Crear cuenta'}
+    <button type="submit" className="btn btn-primary" aria-busy={pending} disabled={pending} aria-label={pending ? 'Procesando solicitud' : undefined}>
+      {pending ? null : 'Crear cuenta'}
     </button>
   </form>;
 }

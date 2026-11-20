@@ -1,0 +1,14 @@
+---
+// Title, optional back link and subtitle on the left; page actions (default slot) on the right.
+const { title, subtitle, subtitleId, backHref, backLabel } = Astro.props as {
+  title: string; subtitle?: string; subtitleId?: string; backHref?: string; backLabel?: string;
+};
+---
+<header class="page-header">
+  <div class="page-header-text">
+    {backHref && <a class="back-link" href={backHref}>{backLabel}</a>}
+    <h1>{title}</h1>
+    {(subtitle !== undefined || subtitleId) && <p class="page-header-subtitle" id={subtitleId}>{subtitle}</p>}
+  </div>
+  <div class="page-header-actions"><slot /></div>
+</header>

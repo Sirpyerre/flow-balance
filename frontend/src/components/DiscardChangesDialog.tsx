@@ -18,9 +18,9 @@ export default function DiscardChangesDialog({ dirty, href, onDiscard, disabled 
   return <>
     {href ? <a className="button" href={href} onClick={cancel}>Cancelar</a>
       : <button type="button" onClick={cancel} disabled={disabled}>Cancelar</button>}
-    <dialog className="discard-changes" ref={dialog} aria-label="Descartar cambios">
+    <dialog className="dialog discard-changes" ref={dialog} aria-label="Descartar cambios">
       <h2>¿Descartar los cambios?</h2>
-      <div className="workspace-actions">
+      <div className="form-actions">
         <button type="button" autoFocus onClick={() => dialog.current?.close()}>Seguir editando</button>
         <button type="button" className="danger" onClick={discard}>Descartar cambios</button>
       </div>

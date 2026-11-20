@@ -4,8 +4,8 @@ import { expect, test } from '@playwright/test';
 test('keeps theme, navigation, project drafts and history usable at 360 px', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto('/');
-  await expect(page.getByRole('combobox', { name: 'Tema' })).toHaveValue('dark');
-  await page.getByRole('combobox', { name: 'Tema' }).selectOption('light');
+  await expect(page.getByRole('switch', { name: 'Modo oscuro' })).toBeChecked();
+  await page.getByRole('switch', { name: 'Modo oscuro' }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
@@ -91,7 +91,7 @@ test('keeps theme, navigation, project drafts and history usable at 360 px', asy
   await expect(page.getByText('Cliente móvil', { exact: true })).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   await page.setViewportSize({ width: 1080, height: 800 });
-  await page.getByRole('combobox', { name: 'Tema' }).selectOption('dark');
+  await page.getByRole('switch', { name: 'Modo oscuro' }).click();
   await navigation.getByRole('link', { name: 'Tablero' }).click();
   await expect(page.getByRole('heading', { name: 'Tablero' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

@@ -1,0 +1,20 @@
+/* Document defaults read the tokens, so they follow the active theme. */
+:root { font-family: "Inter Variable", system-ui, sans-serif; color: var(--text); background: var(--base); }
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+body.public-page {
+  background: radial-gradient(circle at 75px 56px, var(--glow), transparent 70%) top left / 520px 520px no-repeat;
+}
+a { color: var(--link); }
+p { line-height: 1.6; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.app-content { max-width: 55rem; margin: 3rem auto; padding: 0 24px; }
+button, input { font: inherit; }
+form { display: grid; gap: 20px; }
+label { display: grid; gap: 8px; color: var(--label); font-size: 14px; font-weight: 500; }
+.app-content-wide { max-width: 82rem; margin-block: 1.5rem; padding-inline: clamp(1rem, 2vw, 2rem); }
+.app-content.private-content { margin: 0 0 0 6rem; max-width: 90rem; padding: clamp(1rem, 3vw, 2rem); }
+[hidden] { display: none !important; }
+@media (max-width: 700px) {
+  .app-content.private-content { margin: 0; padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom)); }
+}

@@ -1,0 +1,246 @@
+.auth-wrap { width: min(calc(100% - 48px), 440px); padding: 0 24px; margin: 72px auto 96px; }
+.auth-card { padding: 40px; }
+.auth-card h1 { margin: 0 0 8px; font-size: 32px; letter-spacing: -.01em; line-height: 1.2; }
+.auth-description { color: var(--muted); font-size: 15px; margin: 0 0 32px; }
+.password-control { position: relative; }
+.password-control input { padding-inline-end: 48px; }
+.password-control button {
+  position: absolute; inset-block-start: 2px; inset-inline-end: 2px;
+  width: 44px; height: 44px; padding: 0; border: 0; color: var(--label);
+}
+.password-control button:hover { color: var(--text); }
+.password-control button:focus-visible { outline-offset: -3px; }
+.auth-card button[type=submit] { min-height: 52px; margin-top: 8px; width: 100%; font-size: 16px; }
+.auth-footer { margin: 24px 0 0; text-align: center; color: var(--muted); font-size: 14px; }
+.auth-footer a { font-weight: 500; text-decoration: none; }
+.auth-footer a:hover { text-decoration: underline; }
+@media (max-width: 540px) {
+  .auth-wrap { width: min(100%, 440px); margin-top: 40px; }
+  .auth-card { padding: 24px; }
+}
+
+.page-card {
+  width: min(100%, 42rem);
+  margin-block: 1rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  overflow-wrap: anywhere;
+}
+.page-card h1 { margin-top: 0; }
+.page-card form { margin-block: 1rem; }
+.page-card > .button { margin: 0.25rem; }
+.page-card summary { cursor: pointer; }
+.detail-list { display: grid; gap: 0.75rem; }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0.2rem 0 0; }
+
+.back-link { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; text-underline-offset: 3px; }
+.detail-card { width: 100%; }
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.detail-header h1 { margin: 0 0 .5rem; font-size: clamp(1.55rem, 4vw, 2rem); line-height: 1.2; }
+.detail-header .button { min-height: 44px; }
+.detail-card .detail-list,
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.75rem), 1fr));
+  gap: .75rem;
+  margin: 1.25rem 0;
+}
+.detail-card dt { color: var(--label); font-size: .875rem; }
+.metric-grid { display: grid; }
+.section-heading { margin: 1.5rem 0 .75rem; font-size: 1.2rem; }
+.record-list { list-style: none; margin: 0; padding: 0; }
+.record-list li { display: grid; gap: .35rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.record-list li:first-child { border-top: 1px solid var(--border); }
+.record-list span { color: var(--label); font-size: .875rem; }
+.record-list a { justify-self: start; text-underline-offset: 3px; }
+.record-list strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.charge-form { margin-top: 1rem; padding: 0 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--base); }
+.charge-form summary { padding: .875rem 0; font-weight: 600; }
+.charge-form[open] summary { border-bottom: 1px solid var(--border); }
+.charge-form button { justify-self: start; min-height: 44px; }
+@media (max-width: 420px) {
+  .detail-header > .button, .charge-form button { width: 100%; }
+}
+
+.payment-corrections { margin-block: 1rem; }
+.correction-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.payment-corrections fieldset { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.payment-corrections dialog { width: min(calc(100% - 2rem), 30rem); }
+/* Edit form mirrors the payment entry layout: fields on the left, project summary beside them from 901 px. */
+.payment-edit-form { display: grid; gap: 1rem; }
+.payment-edit-form > p { margin: 0; }
+.payment-corrections .payment-edit-fields { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+.payment-edit-fields > .currency-confirmation, .payment-edit-fields > label:last-child { grid-column: 1 / -1; }
+.payment-edit-form > .project-payment-summary { min-width: 0; margin: 0; }
+.payment-edit-form > .correction-actions { border-top: 1px solid var(--border); padding-top: 1rem; }
+@media (min-width: 901px) {
+  .payment-edit-form { grid-template-columns: minmax(0, 1fr) 19rem; column-gap: 1.5rem; }
+  .payment-edit-form > :not(.project-payment-summary) { grid-column: 1; }
+  .payment-edit-form > .project-payment-summary { grid-column: 2; grid-row: 1 / span 3; align-self: start; }
+}
+
+.project-payment-summary {
+  padding: 1rem;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  background: var(--base);
+  margin-block-end: 1rem;
+}
+
+.project-payment-summary h2 {
+  font-size: 1rem;
+  margin: 0 0 .5rem;
+}
+
+.project-payment-summary p {
+  margin: .25rem 0;
+}
+
+.project-payment-projection {
+  border-block-start: 1px solid var(--input-border);
+  margin-block-start: .65rem;
+  padding-block-start: .5rem;
+}
+
+.payment-entry-form > fieldset {
+  display: grid;
+  gap: inherit;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.payment-entry-panel {
+  width: min(100%, 40.5rem);
+  margin-inline: auto;
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+
+.payment-entry-header h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
+.payment-entry-header p { margin: .125rem 0 0; color: var(--muted); font-size: .875rem; }
+
+.page-card .payment-entry-form { gap: 1rem; margin: .875rem 0 0; }
+.payment-entry-form > fieldset { gap: .75rem; }
+.payment-entry-source { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+.payment-entry-amounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.payment-entry-amounts > :nth-child(n+4) { grid-column: 1 / -1; }
+.payment-entry-form label { gap: .375rem; }
+.payment-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .625rem; }
+.payment-entry-actions > * { min-height: 44px; }
+
+.payment-summary-compact { margin: 0; }
+.payment-summary-accessible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.payment-summary-metrics { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; }
+.payment-summary-metrics > :last-child { text-align: right; }
+.payment-summary-label {
+  display: block;
+  color: var(--muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+.payment-summary-metrics strong {
+  display: block;
+  padding-top: .125rem;
+  font-size: clamp(1rem, 4vw, 1.375rem);
+  font-variant-numeric: tabular-nums;
+}
+.payment-summary-metrics strong span { color: var(--muted); }
+.payment-summary-track {
+  display: flex;
+  gap: .25rem;
+  height: .375rem;
+  margin-block: .625rem .5rem;
+  border-radius: var(--radius-pill);
+  background: var(--base);
+}
+.payment-summary-track:has(> :only-child) { background: var(--input-border); }
+.payment-summary-track span { flex: 1; min-width: 0; border-radius: inherit; background: var(--input-border); }
+.payment-summary-track .is-filled { background: var(--gradient); }
+.payment-summary-compact .payment-summary-next { color: var(--link); font-size: .8125rem; margin-bottom: 0; }
+.payment-summary-note { color: var(--muted); font-size: .8125rem; }
+
+@media (max-width: 540px) {
+  .payment-entry-source { grid-template-columns: minmax(0, 1fr); }
+  .payment-entry-amounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-entry-amounts > :first-child { grid-column: 1 / -1; }
+  .payment-entry-actions > * { flex: 1; }
+}
+
+
+.project-delivery {
+  margin-top: 1rem;
+  padding: .875rem;
+  background: var(--base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.project-delivery p { margin: 0; }
+.project-delivery form { grid-template-columns: minmax(0, 14rem) max-content; align-items: end; gap: .75rem; margin-bottom: 0; }
+.project-delivery button { min-height: 48px; }
+@media (max-width: 420px) {
+  .project-delivery form { grid-template-columns: minmax(0, 1fr); }
+}
+
+.currency-confirmation { display: flex; align-items: center; gap: .625rem; }
+.currency-confirmation input[type="checkbox"] { width: 1rem; min-height: 1rem; margin: 0; accent-color: var(--link); }
+
+.split-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 1rem; align-items: start; }
+.field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.split-layout h2 { font-size: 1rem; margin: 0; }
+.side-panel dl { display: grid; grid-template-columns: 1fr auto; gap: .5rem; overflow-wrap: anywhere; }
+.side-panel dd { margin: 0; font-weight: 700; text-align: end; }
+.side-panel dt, .form-note { color: var(--muted); }
+.field-heading { display: flex; justify-content: space-between; align-items: center; }
+.page-workspace h1 { margin: 0 0 1rem; }
+@media (max-width: 700px) { .split-layout, .field-row { grid-template-columns: minmax(0, 1fr); } }
+
+.discard-changes { width: min(26rem, calc(100% - 2rem)); }
+.net-callout { display: block; background: var(--highlight-surface); padding: .75rem; border-radius: var(--radius-md); }
+.payment-entry-actions { border-top: 1px solid var(--border); padding-top: 1rem; }
+.payment-entry-actions > dialog { min-height: auto; }
+.payment-entry-form > .project-payment-summary { min-width: 0; }
+/* Labels and figures stay on one line; the card-wide anywhere-wrap would split "PAGOS" and "1 / 3". */
+.project-payment-summary { overflow-wrap: normal; }
+.payment-summary-label, .payment-summary-metrics strong { white-space: nowrap; }
+@media (min-width: 901px) {
+  .payment-entry-panel { width: min(100%, 60rem); }
+  .page-card .payment-entry-form { grid-template-columns: minmax(0, 1fr) 19rem; column-gap: 1.5rem; }
+  .payment-entry-form > .project-payment-summary { grid-column: 2; grid-row: 1 / span 3; align-self: start; }
+  .payment-entry-form > :not(.project-payment-summary) { grid-column: 1; }
+}
+
+.split-layout .page-card { width: 100%; max-width: none; margin: 0; }
+
+
+.page-workspace .record-list.page-card { padding: .5rem 1.25rem; }
+.page-workspace .record-list.page-card li:first-child { border-top: 0; }
+.page-workspace .record-list.page-card li:last-child { border-bottom: 0; }
+.payment-entry-panel > label { margin-block: 1rem; }
+.payment-entry-header { margin-bottom: 1rem; }
+.payment-entry-header h1 { overflow-wrap: anywhere; }
+.side-panel progress { width: 100%; accent-color: var(--accent); }
+@media (max-width: 700px) {
+  .detail-card .detail-list, .detail-card .metric-grid { grid-template-columns: minmax(0, 1fr); }
+  .private-destinations a { min-height: 44px; }
+  .private-theme select { min-height: 44px; }
+}
+.period-note { color: var(--muted); margin: .3rem 0 1rem; font-size: .875rem; }
+
+.discard-changes :is(input, textarea) { width: 100%; min-width: 0; }
+

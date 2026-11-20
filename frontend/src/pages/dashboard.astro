@@ -1,6 +1,7 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
 import MonthPicker from '../components/MonthPicker.astro';
+import PageHeader from '../components/PageHeader.astro';
 ---
 <AppLayout title="Tablero" wide>
   <div class="dashboard-shell" id="dashboard">
@@ -13,47 +14,44 @@ import MonthPicker from '../components/MonthPicker.astro';
     </label>
     <button id="logout" type="button" hidden>Cerrar sesión</button>
   </div>
-  <header class="dashboard-heading">
-    <div><h1>Tablero</h1><p id="dashboard-period"></p></div>
-    <div class="dashboard-actions">
+  <PageHeader title="Tablero" subtitleId="dashboard-period">
       <button class="button" id="month" type="button" aria-haspopup="dialog" aria-controls="month-dialog" hidden>
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg>
         <span>Mes del reporte</span>
       </button>
       <button class="button primary" id="capture" type="button" aria-haspopup="dialog" hidden>Registrar cobro</button>
-    </div>
-  </header>
+  </PageHeader>
   <MonthPicker />
-  <dialog id="capture-dialog" aria-labelledby="capture-title">
+  <dialog class="dialog" id="capture-dialog" aria-labelledby="capture-title">
     <h2 id="capture-title">Elige un proyecto</h2>
     <ul id="capture-projects" class="records"></ul>
     <form method="dialog"><button>Cerrar</button></form>
   </dialog>
   <a class="button primary" id="first-project" href="/projects/new" hidden>Crear mi primer proyecto</a>
   <p id="logout-error" role="alert" hidden></p>
-  <p id="status" role="status">Cargando tu tablero…</p>
+  <div id="status" class="state state-loading" role="status" aria-busy="true">Cargando tu tablero…</div>
   <button id="dashboard-retry" type="button" hidden>Reintentar tablero</button>
   <div id="account" hidden>
     <div class="dashboard-metrics">
-      <section class="panel summary" aria-labelledby="summary-title">
+      <section class="card panel summary" aria-labelledby="summary-title">
         <h2 id="summary-title">Abonado este mes</h2>
         <p id="total" class="amount"></p>
         <p id="month-count" class="empty"></p>
       </section>
-      <section class="panel" aria-labelledby="pending-title">
+      <section class="card panel" aria-labelledby="pending-title">
         <h2 id="pending-title">Saldo pendiente</h2>
         <p id="pending-total" class="amount"></p>
         <p id="pending-count" class="empty"></p>
         <p id="balance-exclusions" class="empty"></p>
       </section>
-      <section class="panel" aria-labelledby="active-clients-title">
+      <section class="card panel" aria-labelledby="active-clients-title">
         <h2 id="active-clients-title">Clientes activos</h2>
         <p id="active-clients" class="amount"></p>
         <p id="active-projects" class="empty"></p>
       </section>
     </div>
     <div class="dashboard-main">
-    <section id="monthly-chart" class="panel chart-panel" aria-labelledby="chart-title">
+    <section id="monthly-chart" class="card panel chart-panel" aria-labelledby="chart-title">
       <div class="report-heading">
         <h2 id="chart-title">Cobros por mes</h2>
         <p id="chart-year" class="empty"></p>
@@ -63,7 +61,7 @@ import MonthPicker from '../components/MonthPicker.astro';
         <span class="chart-selected-key">Mes seleccionado</span><span>Otros meses</span>
       </div>
     </section>
-    <section class="panel" aria-labelledby="project-balances-title">
+    <section class="card panel" aria-labelledby="project-balances-title">
       <div class="report-heading balance-heading">
         <h2 id="project-balances-title">Saldos por proyecto</h2>
         <div class="month-field balance-filter" hidden>
@@ -74,7 +72,7 @@ import MonthPicker from '../components/MonthPicker.astro';
           </select>
         </div>
       </div>
-      <p id="balance-status" class="empty" role="status"></p>
+      <div id="balance-status" class="state" role="status"></div>
       <button id="balance-retry" class="button" type="button" hidden>Reintentar</button>
       <ul id="project-balances" class="balance-list"></ul>
       <a id="balance-create" href="/projects/new" hidden>Nuevo proyecto</a>
@@ -82,7 +80,7 @@ import MonthPicker from '../components/MonthPicker.astro';
 
     </div>
     <div class="collections">
-      <section class="panel" aria-labelledby="clients-title">
+      <section class="card panel" aria-labelledby="clients-title">
         <div class="collection-heading">
           <h2 id="clients-title"><a href="/clients">Clientes</a> <span id="client-count"></span></h2>
           <a href="/clients/new" aria-label="Nuevo cliente">+ Nuevo</a>
@@ -90,7 +88,7 @@ import MonthPicker from '../components/MonthPicker.astro';
         <ul id="clients" class="records collection-records" role="list"></ul>
         <p id="clients-empty" class="empty">Aún no tienes clientes.</p>
       </section>
-      <section class="panel" aria-labelledby="projects-title">
+      <section class="card panel" aria-labelledby="projects-title">
         <div class="collection-heading">
           <h2 id="projects-title"><a href="/projects">Proyectos</a> <span id="project-count"></span></h2>
           <a href="/projects/new" aria-label="Nuevo proyecto">+ Nuevo</a>
@@ -98,14 +96,14 @@ import MonthPicker from '../components/MonthPicker.astro';
         <ul id="projects" class="records collection-records" role="list"></ul>
         <p id="projects-empty" class="empty">Aún no tienes proyectos.</p>
       </section>
-      <section class="panel" aria-labelledby="payments-title">
+      <section class="card panel" aria-labelledby="payments-title">
         <div class="collection-heading"><h2 id="payments-title">Últimos cobros <span id="payment-count"></span></h2>
           <a href="/payments">Ver todos</a></div>
         <ul id="payments" class="records collection-records" role="list"></ul>
-        <p class="empty">Aún no tienes cobros.</p>
+        <p id="payments-empty" class="empty">Aún no tienes cobros.</p>
       </section>
     </div>
-    <section class="panel report" aria-labelledby="report-title">
+    <section class="card panel report" aria-labelledby="report-title">
       <div class="report-heading">
         <h2 id="report-title">Cobros del mes</h2>
         <p id="report-total" role="status"></p>
@@ -134,7 +132,7 @@ import MonthPicker from '../components/MonthPicker.astro';
 
 <style>
   [hidden] { display: none !important; }
-  .dashboard-heading, .report-heading {
+  .report-heading {
     display: flex;
     justify-content: space-between;
     align-items: start;
@@ -145,31 +143,12 @@ import MonthPicker from '../components/MonthPicker.astro';
   h1 { font-size: clamp(28px, 5vw, 36px); }
   h2 { font-size: 19px; }
   h3 { font-size: 15px; margin-top: 22px; }
-  #status { color: var(--muted); }
-  #status:empty { display: none; }
   #account { display: grid; gap: 18px; margin-top: 26px; }
-  .panel {
-    min-width: 0;
-    padding: clamp(16px, 4vw, 26px);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-  }
+  .panel { min-width: 0; padding: clamp(16px, 4vw, 26px); }
   .summary { background: linear-gradient(110deg, var(--highlight-surface), var(--surface) 72%); }
   .amount { margin-top: 12px; font-size: clamp(20px, 4vw, 30px); font-weight: 700; overflow-wrap: anywhere; }
   .balance-heading { align-items: end; }
-  .balance-filter select {
-    width: 100%;
-    min-height: 44px;
-    padding: 8px 12px;
-    border: 1px solid var(--input-border);
-    border-radius: 10px;
-    background: var(--base);
-    color: var(--text);
-    color-scheme: dark;
-    font: inherit;
-  }
-  .balance-filter select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .balance-filter select { width: 100%; height: var(--control-h); font-size: .875rem; }
   .balance-list {
     display: grid;
     gap: 12px;
@@ -181,7 +160,7 @@ import MonthPicker from '../components/MonthPicker.astro';
   .balance-list :global(.balance-row) {
     padding: 14px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     background: var(--base);
     overflow-wrap: anywhere;
   }
@@ -193,7 +172,6 @@ import MonthPicker from '../components/MonthPicker.astro';
     gap: 6px 14px;
     font-weight: 700;
   }
-  .balance-list :global(.balance-state) { color: var(--muted); font-size: .875rem; }
   .balance-list :global(.balance-amounts) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
@@ -219,21 +197,16 @@ import MonthPicker from '../components/MonthPicker.astro';
     .collections { grid-template-columns: 1fr; }
     .month-field { width: 100%; }
   }
-  .dashboard-heading { gap: .75rem; align-items: center; }
-  .dashboard-heading h1 { font-size: 1.55rem; }
-  #dashboard-period, #report-total { color: var(--muted); margin: 0; font-size: .875rem; }
-  .dashboard-actions { display: flex; flex-wrap: wrap; gap: .625rem; align-items: center; }
-  #balance-filter { min-height: 38px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--base); color: var(--text); padding: .4rem .75rem; font: inherit; font-size: .875rem; }
+  :global(#dashboard-period), #report-total { color: var(--muted); margin: 0; font-size: .875rem; }
   #account { margin-top: 1.125rem; gap: 1rem; }
   .dashboard-metrics, .dashboard-main { display: grid; gap: 1rem; }
-  .dashboard-metrics { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); }
   .dashboard-main { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   .dashboard-main .panel { min-height: 13rem; }
   .dashboard-metrics h2 { font-size: .875rem; color: var(--muted); }
   .summary h2 { color: var(--link); }
   .summary { background: linear-gradient(110deg, var(--highlight-surface), var(--highlight-end)); }
-  .amount { margin-top: .375rem; line-height: 1.15; font-size: clamp(1.4rem, 3vw, 1.75rem); }
-  .summary .amount { font-size: clamp(1.7rem, 4vw, 2.25rem); }
+  .amount { margin-top: .375rem; line-height: 1.15; font-size: clamp(1.4rem, 2.1vw, 1.75rem); }
+  .summary .amount { font-size: clamp(1.7rem, 3.2vw, 2.25rem); }
   .panel h2 { font-size: 1rem; }
   .dashboard-metrics h2 { font-size: .875rem; }
   .panel { padding: clamp(1rem, 2.25vw, 1.5rem); }
@@ -251,14 +224,11 @@ import MonthPicker from '../components/MonthPicker.astro';
   .balance-filter { width: auto; }
   .balance-list :global(a) { color: var(--text); text-decoration: none; }
   .balance-list :global(a:hover) { text-decoration: underline; }
-  .balance-list :global(.balance-state) { padding: .2rem .5rem; border-radius: .375rem; background: var(--surface); }
-  .balance-list :global(.balance-state.outstanding) { color: #ffbd47; background: #292010; }
-  .balance-list :global(progress) { display: block; margin-top: .875rem; width: 100%; height: .375rem; appearance: none; border: 0; border-radius: .375rem; background: var(--input-border); }
-  .balance-list :global(progress::-webkit-progress-bar) { background: var(--input-border); border-radius: .375rem; }
-  .balance-list :global(progress::-webkit-progress-value) { background: var(--gradient); border-radius: .375rem; }
-  .balance-list :global(progress::-moz-progress-bar) { background: var(--gradient); border-radius: .375rem; }
-  #capture-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); color: var(--text); }
-  #capture-dialog::backdrop { background: #0009; }
+  .balance-list :global(progress) { display: block; margin-top: .875rem; width: 100%; height: .375rem; appearance: none; border: 0; border-radius: var(--radius-sm); background: var(--input-border); }
+  .balance-list :global(progress::-webkit-progress-bar) { background: var(--input-border); border-radius: var(--radius-sm); }
+  .balance-list :global(progress::-webkit-progress-value) { background: var(--gradient); border-radius: var(--radius-sm); }
+  .balance-list :global(progress::-moz-progress-bar) { background: var(--gradient); border-radius: var(--radius-sm); }
+  #capture-dialog { width: min(30rem, calc(100% - 2rem)); }
   #capture-dialog form { justify-content: end; }
   .net-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); gap: .75rem; margin: 1rem 0; padding-top: .875rem; border-top: 1px solid var(--border); }
   .net-metrics dt { color: var(--muted); font-size: .8125rem; }
@@ -269,26 +239,27 @@ import MonthPicker from '../components/MonthPicker.astro';
   .dashboard-shell { min-width: 0; }
   .dashboard-content { min-width: 0; padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem; }
   .dashboard-brand { font-weight: 800; }
-  .dashboard-toolbar { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
-  .dashboard-search { display: flex; align-items: center; gap: .55rem; width: min(100%, 22.5rem); border: 1px solid var(--input-border); border-radius: .625rem; background: var(--surface); padding-inline-start: .75rem; color: var(--muted); }
-  .dashboard-search input { width: 100%; min-width: 0; min-height: 2.375rem; border: 0; border-radius: .625rem; background: transparent; padding: .4rem .625rem .4rem 0; color: var(--text); font-size: .875rem; }
-  .dashboard-search svg { flex: 0 0 1rem; }
+  .dashboard-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .dashboard-search { flex: 1 1 14rem; display: flex; align-items: center; gap: .55rem; max-width: 22.5rem; border: 1px solid var(--field-border); border-radius: var(--radius-md); background: var(--surface); padding-inline-start: .75rem; color: var(--muted); }
+  .dashboard-search input { width: 100%; min-width: 0; min-height: 2.375rem; border: 0; border-radius: var(--radius-md); background: transparent; padding: .4rem .625rem .4rem 0; color: var(--text); font-size: .875rem; }
+  .dashboard-search svg { flex: 0 0 1rem; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; }
+  .dashboard-search:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
+  .dashboard-search input:focus { box-shadow: none; }
   #logout { margin-inline-start: auto; white-space: nowrap; }
-  #month, #capture, #logout { min-height: 2.625rem; }
   #month { background: var(--surface); white-space: nowrap; }
   #month svg { flex: none; color: var(--link); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-  .dashboard-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-metrics { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
   .dashboard-main { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   .chart-panel { display: grid; gap: 1rem; align-content: start; }
   .chart-bars { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; min-height: 12rem; }
-  .chart-bars :global(.chart-month) { display: grid; grid-template-rows: 10rem auto; border: 0; border-radius: .375rem; padding: 0; gap: .5rem; color: var(--muted); font-size: .7rem; background: transparent; }
-  .chart-bars :global(.chart-month[aria-pressed="true"]) { color: var(--text); }
+  .chart-bars :global(.chart-month) { display: grid; grid-template-rows: 10rem auto; border: 0; border-radius: var(--radius-sm); padding: 0; gap: .5rem; color: var(--muted); font-size: .7rem; background: transparent; }
+  .chart-bars :global(.chart-month[aria-pressed="true"]) { color: var(--text); font-weight: 700; }
   .chart-bars :global(.chart-track) { display: flex; justify-content: center; align-items: end; width: 100%; height: 100%; border-bottom: 1px solid var(--input-border); background: repeating-linear-gradient(to top, transparent 0 calc(50% - 1px), var(--border) calc(50% - 1px) 50%); }
-  .chart-bars :global(.chart-bar) { width: min(62%, 1.875rem); height: var(--bar-height); border-radius: .325rem .325rem 0 0; background: var(--accent); opacity: .35; }
-  .chart-bars :global(.chart-month:hover .chart-bar), .chart-bars :global(.chart-month[aria-pressed="true"] .chart-bar) { opacity: 1; }
+  .chart-bars :global(.chart-bar) { width: min(62%, 1.875rem); height: var(--bar-height); border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--chart-muted); }
+  .chart-bars :global(.chart-month:hover .chart-bar), .chart-bars :global(.chart-month[aria-pressed="true"] .chart-bar) { background: var(--accent); }
   .chart-legend { display: flex; flex-wrap: wrap; gap: .875rem; color: var(--muted); font-size: .75rem; }
-  .chart-legend span::before { display: inline-block; content: ""; width: .625rem; height: .625rem; border-radius: .2rem; background: var(--accent); opacity: .35; margin-inline-end: .35rem; }
-  .chart-selected-key::before { opacity: 1 !important; }
+  .chart-legend span::before { display: inline-block; content: ""; width: .625rem; height: .625rem; border-radius: .2rem; background: var(--chart-muted); margin-inline-end: .35rem; }
+  .chart-selected-key::before { background: var(--accent) !important; }
   .collection-records :global(a span) { color: var(--text); font-weight: 600; }
   .collections .empty:not([hidden]) { display: block; }
   .collection-heading h2 a { color: inherit; text-decoration: none; }
@@ -303,8 +274,6 @@ import MonthPicker from '../components/MonthPicker.astro';
     .dashboard-metrics .panel:not(.summary) .amount { font-size: clamp(.9rem, 4vw, 1.125rem); overflow-wrap: anywhere; }
     .summary #capture { width: 100%; margin-top: .75rem; }
     .collections section:last-child { order: -1; }
-    .dashboard-heading { align-items: start; }
-    .dashboard-actions { width: 100%; }
     .dashboard-main .panel { min-height: 0; }
   }
 </style>
@@ -318,7 +287,7 @@ import MonthPicker from '../components/MonthPicker.astro';
   const chartYear = document.getElementById('chart-year')!;
   const logoutError = document.querySelector<HTMLElement>('#logout-error')!;
   const session = watchPrivateSession(clear, load, reset);
-  const status = document.querySelector<HTMLParagraphElement>('#status')!;
+  const status = document.querySelector<HTMLElement>('#status')!;
   const account = document.querySelector<HTMLElement>('#account')!;
   const total = document.querySelector<HTMLParagraphElement>('#total')!;
   const firstProject = document.querySelector<HTMLAnchorElement>('#first-project')!;
@@ -393,8 +362,8 @@ import MonthPicker from '../components/MonthPicker.astro';
     const rows = balanceFilter.value === 'all'
       ? balanceRows : balanceRows.filter(row => row.collectionStatus === 'outstanding');
     balanceCreate.hidden = balanceRows.length !== 0;
-    balanceStatus.textContent = balanceRows.length === 0 ? 'Aún no tienes proyectos'
-      : rows.length === 0 ? 'No tienes proyectos con saldo pendiente' : '';
+    setState(balanceStatus, 'empty', balanceRows.length === 0 ? 'Aún no tienes proyectos'
+      : rows.length === 0 ? 'No tienes proyectos con saldo pendiente' : '');
     balanceList.replaceChildren(...rows.map(row => {
       const item = document.createElement('li');
       const link = document.createElement('a');
@@ -404,7 +373,7 @@ import MonthPicker from '../components/MonthPicker.astro';
       const heading = document.createElement('div');
       heading.className = 'balance-row-heading';
       const state = document.createElement('span');
-      state.className = 'balance-state ' + row.collectionStatus;
+      state.className = 'balance-state chip' + ({ outstanding: ' chip-warn', settled: ' chip-ok' } as Record<string, string>)[row.collectionStatus];
       state.textContent = collectionStatusLabel[row.collectionStatus];
       heading.append(link, state);
 
@@ -454,7 +423,7 @@ import MonthPicker from '../components/MonthPicker.astro';
     balanceFilter.value = 'outstanding';
     balanceRetry.hidden = true;
     balanceCreate.hidden = true;
-    balanceStatus.textContent = '';
+    setState(balanceStatus, 'empty', '');
     pendingTotal.textContent = '';
     pendingCount.textContent = '';
     balanceExclusions.textContent = '';
@@ -465,7 +434,7 @@ import MonthPicker from '../components/MonthPicker.astro';
     const current = new AbortController();
     balanceRequest = current;
     const isCurrent = () => balanceRequest === current && !current.signal.aborted && !account.hidden;
-    balanceStatus.textContent = 'Cargando saldos…';
+    setState(balanceStatus, 'loading', 'Cargando saldos…');
     try {
       const response = await fetch('/api/reports/project-balances', {
         signal: current.signal, cache: 'no-store', headers: { 'X-Session-Activity': 'passive' },
@@ -494,7 +463,7 @@ import MonthPicker from '../components/MonthPicker.astro';
       renderBalances();
     } catch {
       if (!isCurrent()) return;
-      balanceStatus.textContent = 'No se pudieron cargar los saldos.';
+      setState(balanceStatus, 'error', 'No se pudieron cargar los saldos.');
       balanceRetry.hidden = false;
     }
   }
@@ -665,9 +634,19 @@ import MonthPicker from '../components/MonthPicker.astro';
   }
   reportRetry.addEventListener('click', () => void report());
   dashboardRetry.addEventListener('click', () => void load());
+  // Keeps a .state element in sync with its lifecycle; errors are announced as alerts.
+  function setState(element: HTMLElement, kind: 'loading' | 'empty' | 'error', text: string) {
+    element.className = `state state-${kind}`;
+    element.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    if (kind === 'loading') element.setAttribute('aria-busy', 'true');
+    else element.removeAttribute('aria-busy');
+    element.textContent = text;
+  }
+
   let request: AbortController | undefined;
   async function load() {
     request?.abort();
+    setState(status, 'loading', 'Cargando tu tablero…');
     const current = new AbortController();
     request = current;
     try {
@@ -695,9 +674,10 @@ import MonthPicker from '../components/MonthPicker.astro';
       const recent = [...data.payments as DashboardPayment[]].sort((first, second) =>
         second.paidOn.localeCompare(first.paidOn) || (BigInt(second.id) > BigInt(first.id) ? 1 : -1));
       renderList(lists[2], recent.slice(0, 4).map(paymentLabel));
+      document.getElementById('payments-empty')!.hidden = recent.length > 0;
       filterCollections();
       searchField.hidden = false;
-      status.textContent = '';
+      setState(status, 'empty', '');
       dashboardRetry.hidden = true;
       month.hidden = capture.hidden = false;
       void report(true);
@@ -707,7 +687,7 @@ import MonthPicker from '../components/MonthPicker.astro';
       logout.hidden = false;
     } catch {
       if (!current.signal.aborted) {
-        status.textContent = 'No se pudo cargar el tablero.';
+        setState(status, 'error', 'No se pudo cargar el tablero.');
         dashboardRetry.hidden = false;
       }
     }

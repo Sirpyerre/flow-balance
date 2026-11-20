@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  Producto: Flow Balance, control de ingresos freelance (clientes, proyectos, cobros, saldos).
+  Stack: PHP 8.4 con Laminas Mezzio, PostgreSQL, migraciones Phinx. Frontend en `frontend/`:
+  Astro 5 (páginas y layouts) con islas de React 19, Inter Variable, PWA con service worker.
+  Se ejecuta con Herd y HTTPS local. Pruebas: PHPUnit (`tests/`), Playwright (`frontend/tests/`).
+  Estilos: un solo `frontend/src/styles/theme.css` con tokens por tema (`data-theme` oscuro/claro);
+  `dashboard.astro`, `index.astro` y `SiteHeader.astro` tienen además bloques `<style>` propios.
+  Identidad visual vigente: oscuro por defecto, acento violeta #8B5CF6 a rosa #F43F5E, Inter, tarjetas
+  con radio 16 px, campos de 48 px con radio 10 px. Referencias en `docs/desing/` y
+  `specs/006-improve-app-usability/references/`.
+  Idioma: documentos de especificación en español; identificadores y comentarios de código en inglés;
+  interfaz es-MX.
+  Historial: las especificaciones 001 a 006 se hicieron con Spec Kit y viven en `specs/`. Desde la
+  adopción de OpenSpec, los cambios nuevos viven en `openspec/changes/`. La constitución está en
+  `.specify/memory/constitution.md`.
+  Invariantes que no se rompen: cálculos monetarios decimales fuera de componentes visuales, cada
+  importe con su moneda, estados de entrega y cobro independientes, idempotencia y trazabilidad de
+  cobros, pertenencia por cuenta, CSRF, respuestas privadas sin caché. Las etiquetas y nombres
+  accesibles actuales («Guardar cliente», «Guardar proyecto», «Guardar cobro», «Guardar cambios»,
+  «Registrar cobro», «Editar cobro», «Elegir mes», etc.) son contrato: las pruebas de Playwright
+  los usan como selectores.
+
+rules:
+  proposal:
+    - Escribir en español. Indicar qué queda fuera de alcance (backend, API, esquema de datos).
+  specs:
+    - Escribir en español, pero conservar los encabezados estructurales de la plantilla en inglés (`## ADDED Requirements`, `### Requirement:`, `#### Scenario:`) y usar MUST o SHALL en cada requisito.
+    - Cada requisito visual debe poder comprobarse a 360 px y a 1080 px, en tema claro y oscuro.
+  design:
+    - Escribir en español. Apoyar cada decisión en hallazgos de código con ruta y línea.
+  tasks:
+    - Escribir en español. Cada tarea indica archivos y la comprobación a 360 y 1080 px en ambos temas.
+    - No cambiar rutas de API, esquema ni nombres accesibles existentes sin una tarea explícita.
+
+operations:
+  apply:
+    guidance:
+      - Ejecutar `herd npm run build` en `frontend/` y las pruebas de Playwright afectadas después de cada grupo de tareas.
+      - Escribir pruebas contra una base de datos independiente de la de desarrollo.
+  archive:
+    guidance:
+      - Resumir el resultado y los pendientes físicos (PWA en teléfono, zoom al 200 %) antes de cerrar.

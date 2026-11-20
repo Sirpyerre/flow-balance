@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import FieldError from './FieldError';
+import { fieldErrorsOf, focusFirstInvalid, invalidProps, type FieldErrors } from '../lib/form-errors';
 import { IncomeError, amountLabel, collectionStatusLabel, incomeRequest, resourceQuery, type Client, type Project } from '../lib/income-api';
 import { estimatedPayment } from '../lib/project-agreement';
 import DiscardChangesDialog from './DiscardChangesDialog';
@@ -16,6 +18,7 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
   const [preview, setPreview] = useState<AgreementPreview>();
   const [excess, setExcess] = useState<string>();
   const [error, setError] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [clientError, setClientError] = useState('');
@@ -45,9 +48,11 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
-    const fields = Object.fromEntries(new FormData(event.currentTarget));
+    const form = event.currentTarget;
+    const fields = Object.fromEntries(new FormData(form));
     setPending(true);
     setError(undefined);
+    setFieldErrors({});
     try {
       const body: Record<string, unknown> = isClient ? { name: fields.name } : { ...fields };
       if (!isClient) {
@@ -68,6 +73,8 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
         : `/projects/view?${resourceQuery('id', id)}`);
     } catch (failure) {
       setError(failure instanceof IncomeError ? failure.message : 'Revisa tu conexión e intenta de nuevo.');
+      setFieldErrors(fieldErrorsOf(failure));
+      focusFirstInvalid(form, fieldErrorsOf(failure));
       if (failure instanceof IncomeError && failure.result.error?.fields?.agreementAdjustmentReason) {
         setExcess(failure.result.excessAmount);
       }
@@ -97,42 +104,44 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
 
   return <>
     <h1>{isClient ? 'Nuevo cliente' : project ? 'Editar proyecto' : 'Nuevo proyecto'}</h1>
-    <div className="workspace-grid">
-      <form className="income-panel" onSubmit={submit} onChange={() => setDirty(true)}>
+    <div className="split-layout">
+      <form className="card page-card" onSubmit={submit} onChange={() => setDirty(true)}>
         {!isClient && <>
           <h2>Datos del proyecto</h2>
-          <div className="workspace-field-heading">
+          <div className="field-heading">
             <label htmlFor="project-client">Cliente</label>
             {!project && <button type="button" onClick={() => addClient.current?.showModal()}>Crear cliente</button>}
           </div>
-          <select id="project-client" name="clientId" required value={clientId} disabled={project?.canChangeClient === false || Boolean(project?.paymentCount)} onChange={event => setClientId(event.target.value)}>
+          <select id="project-client" name="clientId" required {...invalidProps(fieldErrors, 'clientId')} value={clientId} disabled={project?.canChangeClient === false || Boolean(project?.paymentCount)} onChange={event => setClientId(event.target.value)}>
             <option value="" disabled>Selecciona un cliente</option>
             {choices.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
           </select>
+          <FieldError errors={fieldErrors} name="clientId" />
         </>}
-        <label>{isClient ? 'Nombre del cliente' : 'Nombre del proyecto'}<input name="name" maxLength={100} defaultValue={project?.name} required /></label>
-        {isClient && <p className="workspace-note">Así aparecerá al registrar proyectos y cobros.</p>}
+        <label>{isClient ? 'Nombre del cliente' : 'Nombre del proyecto'}<input name="name" maxLength={100} defaultValue={project?.name} required {...invalidProps(fieldErrors, 'name')} /><FieldError errors={fieldErrors} name="name" /></label>
+        {isClient && <p className="form-note">Así aparecerá al registrar proyectos y cobros.</p>}
         {!isClient && <>
-          <label>Origen del proyecto<input name="acquisitionSource" maxLength={100} defaultValue={project?.acquisitionSource ?? ''} required={!project} /></label>
+          <label>Origen del proyecto<input name="acquisitionSource" maxLength={100} defaultValue={project?.acquisitionSource ?? ''} required={!project} {...invalidProps(fieldErrors, 'acquisitionSource')} /><FieldError errors={fieldErrors} name="acquisitionSource" /></label>
           <h2>Acuerdo de pago</h2>
-          <div className="workspace-fields">
-            <label>Monto acordado (MXN)<input name="agreedAmount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} required={!project} /></label>
-            <label>Pagos acordados<input name="agreedPaymentCount" type="number" inputMode="numeric" min="1" step="1" value={count} onChange={event => setCount(event.target.value)} required={!project} /></label>
+          <div className="field-row">
+            <label>Monto acordado (MXN)<input name="agreedAmount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} required={!project} {...invalidProps(fieldErrors, 'agreedAmount')} /><FieldError errors={fieldErrors} name="agreedAmount" /></label>
+            <label>Pagos acordados<input name="agreedPaymentCount" type="number" inputMode="numeric" min="1" step="1" value={count} onChange={event => setCount(event.target.value)} required={!project} {...invalidProps(fieldErrors, 'agreedPaymentCount')} /><FieldError errors={fieldErrors} name="agreedPaymentCount" /></label>
           </div>
           {projectedExcess && <label>Razón del ajuste
             <span>Excedente previsto: {amountLabel(projectedExcess)}</span>
-            <textarea name="agreementAdjustmentReason" maxLength={250} required />
+            <textarea name="agreementAdjustmentReason" maxLength={250} required {...invalidProps(fieldErrors, 'agreementAdjustmentReason')} />
+            <FieldError errors={fieldErrors} name="agreementAdjustmentReason" />
           </label>}
         </>}
         {error && <p role="alert">{error}</p>}
-        <div className="workspace-actions">
+        <div className="form-actions">
           <DiscardChangesDialog dirty={dirty} href={cancelPath} />
           <button className="button primary" aria-busy={pending} disabled={pending}>{isClient ? 'Guardar cliente' : project ? 'Guardar cambios' : 'Guardar proyecto'}</button>
         </div>
       </form>
-      <aside className="income-panel workspace-side">
+      <aside className="card page-card side-panel">
         {isClient ? <><h2>Clientes registrados</h2>
-          {choices.length ? <ul className="income-records">{choices.map(client => <li key={client.id}><a href={`/clients/view?${resourceQuery('id', client.id)}`}>{client.name}</a></li>)}</ul> : <p>Aún no tienes clientes.</p>}</>
+          {choices.length ? <ul className="record-list">{choices.map(client => <li key={client.id}><a href={`/clients/view?${resourceQuery('id', client.id)}`}>{client.name}</a></li>)}</ul> : <p>Aún no tienes clientes.</p>}</>
           : project ? <><h2>Estado del proyecto</h2>
             <p>{collectionStatusLabel[project.collectionStatus]}</p>
             <progress aria-label="Avance de cobro" max={100} value={paidPercentage} />
@@ -141,15 +150,15 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
             {(project.isBalanceProvisional || preview?.isBalanceProvisional) && <p>Saldo provisional. Hay cobros sin convertir.</p>}
           </> : <><h2>Vista previa del acuerdo</h2>
             <dl><dt>Monto por pago</dt><dd>{estimate ? amountLabel(estimate) : 'MXN —'}</dd><dt>Pagos</dt><dd>{count || '—'}</dd></dl>
-            <p className="workspace-note">{estimate ? 'Monto orientativo por pago.' : 'Completa el monto y el número de pagos para ver el monto por pago.'}</p></>}
+            <p className="form-note">{estimate ? 'Monto orientativo por pago.' : 'Completa el monto y el número de pagos para ver el monto por pago.'}</p></>}
       </aside>
     </div>
-    {!isClient && !project && <dialog className="discard-changes" ref={addClient} aria-label="Nuevo cliente">
+    {!isClient && !project && <dialog className="dialog discard-changes" ref={addClient} aria-label="Nuevo cliente">
       <h2>Nuevo cliente</h2>
       <form onSubmit={createClient}>
         <label>Nombre del cliente<input name="name" maxLength={100} required /></label>
         {clientError && <p role="alert">{clientError}</p>}
-        <div className="workspace-actions"><button type="button" disabled={clientSaving} onClick={() => addClient.current?.close()}>Cancelar</button><button className="button primary" disabled={clientSaving}>Guardar cliente</button></div>
+        <div className="form-actions"><button type="button" disabled={clientSaving} onClick={() => addClient.current?.close()}>Cancelar</button><button className="button primary" disabled={clientSaving}>Guardar cliente</button></div>
       </form>
     </dialog>}
   </>;

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import FieldError from './FieldError';
+import { fieldErrorsOf, focusFirstInvalid, invalidProps, type FieldErrors } from '../lib/form-errors';
 import { amountLabel, incomeRequest, IncomeError, resourceQuery, todayInMexico, type Payment } from '../lib/income-api';
 
 import DiscardChangesDialog from './DiscardChangesDialog';
@@ -17,6 +19,7 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
   const [source, setSource] = useState(payment.sourceType ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [conflict, setConflict] = useState(false);
   const [editDraft, setEditDraft] = useState<Record<string, FormDataEntryValue>>();
   const [preview, setPreview] = useState<{ receivedAmount: string; projectedOutstandingBalance: string | null; requiresExcessReason: boolean; isBalanceProvisional: boolean }>();
@@ -54,6 +57,7 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
     setEditDraft(undefined);
     setSelectedPayment(undefined);
     setError('');
+    setFieldErrors({});
     setConflict(false);
     setReasonRequired(false);
     setRetrying(false);
@@ -64,11 +68,13 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (request.current || conflict) return;
-    const draft = Object.fromEntries(new FormData(event.currentTarget));
+    const form = event.currentTarget;
+    const draft = Object.fromEntries(new FormData(form));
     const controller = new AbortController();
     request.current = controller;
     setPending(true);
     setError('');
+    setFieldErrors({});
     try {
       const path = `/api/payments/${encodeURIComponent(payment.id)}`;
       if (mode === 'delete') {
@@ -108,6 +114,8 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
           attempt.current = undefined;
           setRetrying(false);
           setReasonRequired(Boolean(failure.result.error?.fields?.excessReason));
+          setFieldErrors(fieldErrorsOf(failure));
+          focusFirstInvalid(form, fieldErrorsOf(failure));
         }
         setError(failure.message);
       } else {
@@ -139,36 +147,36 @@ export default function PaymentCorrections({ payment, active, onEdited, onRefres
       }} hidden={mode === 'edit'}>Eliminar cobro</button>
     </div>
     {mode === 'saved' && <ProjectPaymentSummary summary={summary} mode="saved" />}
-    {mode === 'edit' && <form onSubmit={submit} aria-label="Editar cobro" onChange={event => setEditDraft(Object.fromEntries(new FormData(event.currentTarget)))}>
+    {mode === 'edit' && <form className="payment-edit-form" onSubmit={submit} aria-label="Editar cobro" onChange={event => setEditDraft(Object.fromEntries(new FormData(event.currentTarget)))}>
       <p>Proyecto <strong>{payment.project.name}</strong></p>
       <ProjectPaymentSummary summary={summary} mode="edit" projectedBalance={preview?.projectedOutstandingBalance} projectedProvisional={preview?.isBalanceProvisional} />
-      <fieldset disabled={pending || retrying || conflict}>
+      <fieldset className="payment-edit-fields" disabled={pending || retrying || conflict}>
         <label>Moneda<select name="currency" value={currency} onChange={event => setCurrency(event.target.value)}>
           {originalCurrency !== 'MXN' && originalCurrency !== 'USD' && <option value={originalCurrency}>{originalCurrency}</option>}
           <option value="MXN">MXN</option><option value="USD">USD</option>
         </select></label>
         {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal"
-          defaultValue={currencyChanged ? '' : draftPayment.exchangeRate ?? ''} required /></label>}
+          defaultValue={currencyChanged ? '' : draftPayment.exchangeRate ?? ''} required {...invalidProps(fieldErrors, 'exchangeRate')} /><FieldError errors={fieldErrors} name="exchangeRate" /></label>}
         {currencyChanged && <label className="currency-confirmation" key={currency}><input type="checkbox" name="confirmCurrencyChange" required /> Confirmo los importes en {currency}</label>}
-        <label>Importe abonado ({currency})<input autoFocus name="clientPaidAmount" inputMode="decimal" required defaultValue={draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1')} /></label>
-        <label>Fecha de pago<input name="paidOn" type="date" defaultValue={draftPayment.paidOn} max={todayInMexico()} required /></label>
+        <label>Importe abonado ({currency})<input autoFocus name="clientPaidAmount" inputMode="decimal" required defaultValue={draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1')} {...invalidProps(fieldErrors, 'clientPaidAmount')} /><FieldError errors={fieldErrors} name="clientPaidAmount" /></label>
+        <label>Fecha de pago<input name="paidOn" type="date" defaultValue={draftPayment.paidOn} max={todayInMexico()} required {...invalidProps(fieldErrors, 'paidOn')} /><FieldError errors={fieldErrors} name="paidOn" /></label>
         <label>Fuente del cobro<select name="sourceType" value={source} onChange={event => setSource(event.target.value)}>
           {!draftPayment.sourceType && <option value="">Sin registrar</option>}
           <option value="direct_client">Cliente directo</option><option value="platform">Plataforma</option><option value="other">Otra</option>
         </select></label>
-        {source !== '' && source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" defaultValue={draftPayment.sourceName ?? ''} required maxLength={100} /></label>}
-        <label>Comisión de plataforma ({currency})<input name="platformFee" inputMode="decimal" defaultValue={draftPayment.platformFee} required /></label>
-        <label>Impuestos descontados ({currency})<input name="withheldTaxAmount" inputMode="decimal" defaultValue={draftPayment.withheldTaxAmount} required /></label>
-        <label>Razón del excedente<input name="excessReason" maxLength={250} required={reasonRequired || preview?.requiresExcessReason} /></label>
+        {source !== '' && source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" defaultValue={draftPayment.sourceName ?? ''} required maxLength={100} {...invalidProps(fieldErrors, 'sourceName')} /><FieldError errors={fieldErrors} name="sourceName" /></label>}
+        <label>Comisión de plataforma ({currency})<input name="platformFee" inputMode="decimal" defaultValue={draftPayment.platformFee} required {...invalidProps(fieldErrors, 'platformFee')} /><FieldError errors={fieldErrors} name="platformFee" /></label>
+        <label>Impuestos descontados ({currency})<input name="withheldTaxAmount" inputMode="decimal" defaultValue={draftPayment.withheldTaxAmount} required {...invalidProps(fieldErrors, 'withheldTaxAmount')} /><FieldError errors={fieldErrors} name="withheldTaxAmount" /></label>
+        <label>Razón del excedente<input name="excessReason" maxLength={250} required={reasonRequired || preview?.requiresExcessReason} {...invalidProps(fieldErrors, 'excessReason')} /><FieldError errors={fieldErrors} name="excessReason" /></label>
       </fieldset>
-      {preview && <output className="income-net">Dinero recibido al cobrar: {amountLabel(preview.receivedAmount, currency)}</output>}
+      {preview && <output className="net-callout">Dinero recibido al cobrar: {amountLabel(preview.receivedAmount, currency)}</output>}
       {feedback}
       <div className="correction-actions">
         <button type="submit" className="button primary" aria-busy={pending} disabled={pending || conflict || !['MXN', 'USD'].includes(currency)}>{retrying ? 'Reintentar guardado' : 'Guardar cambios'}</button>
         <DiscardChangesDialog dirty={Boolean(editDraft)} onDiscard={close} disabled={pending} />
       </div>
     </form>}
-    {active && mode === 'delete' && <dialog ref={dialog} aria-labelledby="delete-payment-title" onCancel={event => { event.preventDefault(); close(); }}>
+    {active && mode === 'delete' && <dialog className="dialog" ref={dialog} aria-labelledby="delete-payment-title" onCancel={event => { event.preventDefault(); close(); }}>
       <h2 id="delete-payment-title">Eliminar cobro</h2>
       <p>{amountLabel(draftPayment.clientPaidAmount.replace(/(\.\d{2})0+$/, '$1'), originalCurrency)} · {draftPayment.paidOn}</p>
       {draftPayment.charges.length > 0 && <>

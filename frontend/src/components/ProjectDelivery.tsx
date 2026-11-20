@@ -43,7 +43,7 @@ export default function ProjectDelivery({ project }: { project: Project }) {
           <option value="delivered">Entregado</option>
         </select>
       </label>
-      <button type="submit" disabled={pending || !selection || selection === current}>Guardar estado</button>
+      <button type="submit" aria-busy={pending} disabled={pending || !selection || selection === current}>Guardar estado</button>
     </form>
     {error && <p role="alert">{error}</p>}
   </section>;

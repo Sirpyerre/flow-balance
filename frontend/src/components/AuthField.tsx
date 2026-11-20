@@ -15,7 +15,7 @@ export default function AuthField({ name, label, type, autoComplete, placeholder
   const controlLabel = name === 'passwordConfirmation' ? 'confirmación de contraseña' : 'contraseña';
   const action = visible ? 'Ocultar' : 'Mostrar';
 
-  return <div className="auth-field">
+  return <div className="field">
     <label htmlFor={name}>{label}</label>
     <div className={isPassword ? 'password-control' : undefined}>
       <input id={name} name={name} type={isPassword && visible ? 'text' : type}

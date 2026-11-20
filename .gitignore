@@ -64,3 +64,6 @@ compose.*.yaml
 frontend/playwright-report/
 frontend/test-results/
 !db/bootstrap/Dockerfile
+
+# Visual validation captures are regenerated, not versioned
+docs/validation/screens/

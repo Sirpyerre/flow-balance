@@ -1,13 +1,13 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import MonthPicker from '../../components/MonthPicker.astro';
+import PageHeader from '../../components/PageHeader.astro';
 ---
 <AppLayout title="Cobros guardados" wide>
-  <header class="workspace-heading">
-    <div><a class="income-back" href="/dashboard">← Tablero</a><h1>Cobros guardados</h1><p id="history-count"></p></div>
+  <PageHeader title="Cobros guardados" subtitleId="history-count" backHref="/dashboard" backLabel="← Tablero">
     <a class="button primary" href="/payments/new">Registrar cobro</a>
-  </header>
-  <section class="income-panel history-summary" id="history-summary" hidden>
+  </PageHeader>
+  <section class="card page-card history-summary" id="history-summary" hidden>
     <dl><div><dt>Total listado</dt><dd id="history-total"></dd></div><div><dt>Último cobro</dt><dd id="history-latest"></dd></div></dl>
     <div id="history-filters" class="history-filters" aria-label="Filtrar cobros">
       <div id="quick-months" class="history-filters"></div>
@@ -15,8 +15,8 @@ import MonthPicker from '../../components/MonthPicker.astro';
     </div>
   </section>
   <MonthPicker />
-  <p id="status" role="status">Verificando tu sesión…</p>
-  <div class="income-panel history-panel" id="history-panel" hidden>
+  <div id="status" class="state state-loading" role="status" aria-busy="true">Verificando tu sesión…</div>
+  <div class="card page-card history-panel" id="history-panel" hidden>
     <div class="history-header" aria-hidden="true"><span>Fecha</span><span>Mes</span><span>Importe</span><span>Acción</span></div>
     <ul id="history" role="list"></ul>
   </div>
@@ -35,6 +35,14 @@ import MonthPicker from '../../components/MonthPicker.astro';
   const panel = document.getElementById('history-panel')!;
   const filters = document.getElementById('quick-months')!;
   const status = document.getElementById('status')!;
+  // Keeps the .state element in sync with the load lifecycle; errors are announced as alerts.
+  function setState(kind: 'loading' | 'empty' | 'error', text: string) {
+    status.className = `state state-${kind}`;
+    status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    if (kind === 'loading') status.setAttribute('aria-busy', 'true');
+    else status.removeAttribute('aria-busy');
+    status.textContent = text;
+  }
   const next = document.querySelector<HTMLButtonElement>('#next-payments')!;
   const month = document.querySelector<HTMLButtonElement>('#history-month')!;
   const date = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -61,7 +69,7 @@ import MonthPicker from '../../components/MonthPicker.astro';
     picker.close();
     filters.replaceChildren();
     summary.hidden = true;
-    status.textContent = '';
+    setState('empty', '');
   }
   function selectPeriod(value: string) {
     if (period === value) return;
@@ -110,7 +118,7 @@ import MonthPicker from '../../components/MonthPicker.astro';
     const active = new AbortController();
     request = active;
     next.hidden = true;
-    status.textContent = 'Cargando cobros…';
+    setState('loading', 'Cargando cobros…');
     try {
       const query = new URLSearchParams();
       if (period) query.set('month', period);
@@ -120,12 +128,12 @@ import MonthPicker from '../../components/MonthPicker.astro';
       render(result);
       cursor = result.nextCursor;
       panel.hidden = list.children.length === 0;
-      status.textContent = panel.hidden ? (period ? 'No hay cobros en este mes. Puedes elegir otro filtro.' : 'Aún no tienes cobros.') : '';
+      setState('empty', panel.hidden ? (period ? 'No hay cobros en este mes. Puedes elegir otro filtro.' : 'Aún no tienes cobros.') : '');
       next.textContent = 'Cargar más cobros';
       next.hidden = cursor === null;
     } catch {
       if (active.signal.aborted) return;
-      status.textContent = 'No se pudieron cargar los cobros.';
+      setState('error', 'No se pudieron cargar los cobros.');
       next.textContent = 'Reintentar';
       next.hidden = false;
     } finally {
@@ -144,7 +152,7 @@ import MonthPicker from '../../components/MonthPicker.astro';
   .history-summary dd { margin: .25rem 0 0; font-weight: 750; overflow-wrap: anywhere; }
   .history-filters { display: flex; min-width: 0; gap: .35rem; align-items: center; }
   .history-filters :global(button) { white-space: nowrap; padding: .4rem .65rem; font-size: .75rem; }
-  .history-filters :global(button[aria-pressed="true"]) { background: var(--gradient); color: white; border-color: transparent; }
+  .history-filters :global(button[aria-pressed="true"]) { color: var(--link); border-color: var(--accent); background: var(--base); }
   .history-panel { padding: 0; overflow: hidden; }
   #history { list-style: none; margin: 0; padding: 0; }
   .history-header, #history :global(li) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 4rem; gap: .625rem; padding: .85rem 1.15rem; }
@@ -152,7 +160,6 @@ import MonthPicker from '../../components/MonthPicker.astro';
   #history :global(li span) { color: var(--muted); }
   #history :global(li strong:nth-child(3)), .history-header span:nth-child(n+3) { text-align: end; }
   #history :global(li a) { text-align: end; }
-  #status:empty { display: none; }
   #next-payments { margin-top: 1rem; }
   @media (max-width: 700px) {
     .history-header { display: none; }

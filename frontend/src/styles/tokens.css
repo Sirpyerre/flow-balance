@@ -1,0 +1,80 @@
+/* Semantic tokens. Dark is the default theme; light overrides under [data-theme="light"]. */
+:root {
+  color-scheme: dark;
+
+  /* Color */
+  --base: #0b0b0f;
+  --surface: #121218;
+  --border: #1e1e26;
+  --input-border: #33333d;
+  --field-border: #6a6a78;
+  --text: #f4f4f6;
+  --label: #e4e4ea;
+  --muted: #8e8e9a;
+  --placeholder: #80808c;
+  --accent: #8b5cf6;
+  --rose: #f43f5e;
+  --link: #c4b5fd;
+  --danger: #ff879a;
+  --highlight-surface: #211837;
+  --highlight-end: #21151b;
+  --on-accent: #fff;
+  --chart-muted: #6d4abf;
+  --warn-text: #ffbd47;
+  --warn-bg: #292010;
+  --ok-text: #6ee7a8;
+  --ok-bg: #0f2a1d;
+  --gradient: linear-gradient(90deg, var(--accent), var(--rose));
+  --glow: rgb(139 92 246 / 35%);
+  --overlay: rgb(0 0 0 / 60%);
+  --focus-ring: 0 0 0 3px rgb(139 92 246 / 25%);
+
+  /* Shape */
+  --radius-sm: .5rem;
+  --radius-md: .625rem;
+  --radius-lg: 1rem;
+  --radius-pill: 999px;
+
+  /* Control size */
+  --control-h: 2.75rem;
+  --control-h-lg: 3rem;
+
+  /* Spacing, in 4px steps */
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Motion */
+  --duration: .15s;
+  --duration-slow: .75s;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --base: #f1f2fa;
+  --surface: #fff;
+  --border: #dce0f0;
+  --input-border: #aeb6d2;
+  --field-border: #7480a8;
+  --text: #20254f;
+  --label: #353d69;
+  --muted: #505a82;
+  --placeholder: #5e698c;
+  --accent: #4815d2;
+  --link: #4010c8;
+  --danger: #a81330;
+  --highlight-surface: #eee8ff;
+  --highlight-end: #f5f0ff;
+  --chart-muted: #9173e4;
+  --warn-text: #7a4b00;
+  --warn-bg: #fff1d6;
+  --ok-text: #0b5b36;
+  --ok-bg: #dcf5e7;
+  --gradient: linear-gradient(90deg, var(--accent), var(--accent));
+  --focus-ring: 0 0 0 3px rgb(72 21 210 / 25%);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration: 0s; --duration-slow: 0s; }
+}

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react';
+import FieldError from './FieldError';
+import { focusFirstInvalid, invalidProps, type FieldErrors } from '../lib/form-errors';
 import { amountLabel, IncomeError, incomeRequest, resourceQuery, todayInMexico, type Payment, type PaymentCurrency, type PaymentEquivalents, type Project } from '../lib/income-api';
 
 import DiscardChangesDialog from './DiscardChangesDialog';
@@ -66,14 +68,14 @@ export default function PaymentForm({ project, active, selection, cancelPath }: 
       if (uncertain) summary.refresh();
       else attempt.current = undefined;
       setError(result);
-      const field = Object.keys(result.result.error?.fields ?? {})[0];
-      if (field) requestAnimationFrame(() => (form.current?.elements.namedItem(field) as HTMLElement | null)?.focus());
+      focusFirstInvalid(form.current, result.result.error?.fields ?? {});
     } finally {
       inFlight.current = undefined;
       if (!controller.signal.aborted) setPending(false);
     }
   }
 
+  const fieldErrors: FieldErrors = error?.result.error?.fields ?? {};
   const excess = error?.result.excessAmount ?? (preview?.requiresExcessReason ? preview.excessAmount : null);
   if (saved) return <>
     <h1>Cobro guardado</h1>
@@ -92,28 +94,28 @@ export default function PaymentForm({ project, active, selection, cancelPath }: 
     <form ref={form} className="payment-entry-form" onSubmit={submit} onChange={() => setDirty(true)} noValidate>
       <fieldset disabled={pending || retrying}>{selection}</fieldset>
       <fieldset className="payment-entry-source" disabled={pending || retrying}>
-        <label>Fecha de pago<input name="paidOn" type="date" defaultValue={todayInMexico()} max={todayInMexico()} required /></label>
+        <label>Fecha de pago<input name="paidOn" type="date" defaultValue={todayInMexico()} max={todayInMexico()} required {...invalidProps(fieldErrors, 'paidOn')} /><FieldError errors={fieldErrors} name="paidOn" /></label>
         <label>Fuente del cobro<select name="sourceType" value={source} onChange={event => setSource(event.target.value)}>
           <option value="direct_client">Cliente directo</option><option value="platform">Plataforma</option><option value="other">Otra</option>
         </select></label>
-        {source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" maxLength={100} required /></label>}
+        {source !== 'direct_client' && <label>Nombre de la fuente<input name="sourceName" maxLength={100} required {...invalidProps(fieldErrors, 'sourceName')} /><FieldError errors={fieldErrors} name="sourceName" /></label>}
         <label>Moneda<select name="currency" value={currency} onChange={event => setCurrency(event.target.value as PaymentCurrency)}>
           <option value="MXN">MXN</option><option value="USD">USD</option>
         </select></label>
-        {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal" value={exchangeRate} onChange={event => setExchangeRate(event.target.value)} required /></label>}
+        {currency === 'USD' && <label>Tipo de cambio (MXN por USD)<input name="exchangeRate" inputMode="decimal" value={exchangeRate} onChange={event => setExchangeRate(event.target.value)} required {...invalidProps(fieldErrors, 'exchangeRate')} /><FieldError errors={fieldErrors} name="exchangeRate" /></label>}
       </fieldset>
       <ProjectPaymentSummary summary={summary} mode="create" projectedBalance={preview?.projectedOutstandingBalance} />
       <fieldset className="payment-entry-amounts" disabled={pending || retrying}>
-        <label>Importe ({currency})<input name="clientPaidAmount" placeholder="0.00" inputMode="decimal" value={amount} onChange={event => { setAmount(event.target.value); setError(undefined); }} required /></label>
-        <label>Comisión{currency === 'USD' && ' (USD)'}<input name="platformFee" inputMode="decimal" value={fee} onChange={event => setFee(event.target.value)} placeholder="0.00" /></label>
-        <label>Impuestos{currency === 'USD' && ' (USD)'}<input name="withheldTaxAmount" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} placeholder="0.00" /></label>
-        {<output className="income-net">Dinero recibido al cobrar: {preview ? amountLabel(preview.receivedAmount, currency) : '—'}
+        <label>Importe ({currency})<input name="clientPaidAmount" placeholder="0.00" inputMode="decimal" value={amount} onChange={event => { setAmount(event.target.value); setError(undefined); }} required {...invalidProps(fieldErrors, 'clientPaidAmount')} /><FieldError errors={fieldErrors} name="clientPaidAmount" /></label>
+        <label>Comisión{currency === 'USD' && ' (USD)'}<input name="platformFee" inputMode="decimal" value={fee} onChange={event => setFee(event.target.value)} placeholder="0.00" {...invalidProps(fieldErrors, 'platformFee')} /><FieldError errors={fieldErrors} name="platformFee" /></label>
+        <label>Impuestos{currency === 'USD' && ' (USD)'}<input name="withheldTaxAmount" inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} placeholder="0.00" {...invalidProps(fieldErrors, 'withheldTaxAmount')} /><FieldError errors={fieldErrors} name="withheldTaxAmount" /></label>
+        {<output className="net-callout">Dinero recibido al cobrar: {preview ? amountLabel(preview.receivedAmount, currency) : '—'}
           {currency === 'USD' && preview?.equivalents && <><br />Importe abonado equivalente: {amountLabel(preview.equivalents.clientPaidAmount)}
             <br />Dinero recibido equivalente: {amountLabel(preview.equivalents.receivedAmount)}</>}
         </output>}
         <div hidden={!excess}>
           {excess && <p>El total supera el monto acordado en {amountLabel(excess)}.</p>}
-          <label>Razón del excedente<textarea name="excessReason" maxLength={250} disabled={!excess} required={Boolean(excess)} /></label>
+          <label>Razón del excedente<textarea name="excessReason" maxLength={250} disabled={!excess} required={Boolean(excess)} {...invalidProps(fieldErrors, 'excessReason')} /><FieldError errors={fieldErrors} name="excessReason" /></label>
         </div>
       </fieldset>
       {error && <p role="alert">{error.message}</p>}

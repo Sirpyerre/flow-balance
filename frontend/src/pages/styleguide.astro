@@ -1,0 +1,62 @@
+---
+// Development-only reference of the shared primitives. Production builds do not serve it.
+import AppLayout from '../layouts/AppLayout.astro';
+import ThemeSelector from '../components/ThemeSelector.astro';
+import StateMessage from '../components/StateMessage.astro';
+if (import.meta.env.PROD) return new Response(null, { status: 404 });
+---
+<AppLayout title="Guía de estilos" publicPage>
+  <div style="display:grid;gap:1.5rem;padding:1.5rem;max-width:72rem;margin:0 auto">
+    <header style="display:flex;justify-content:space-between;align-items:center"><h1>Guía de estilos</h1><ThemeSelector /></header>
+
+    <section class="card" style="padding:1.5rem;display:grid;gap:1rem" aria-labelledby="sg-buttons">
+      <h2 id="sg-buttons">Botones</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:.75rem">
+        <button class="btn btn-primary" type="button">Guardar cobro</button>
+        <button class="btn" type="button">Cancelar</button>
+        <button class="btn btn-danger" type="button">Eliminar cobro</button>
+        <button class="btn btn-primary" type="button" aria-busy="true" disabled>Guardando…</button>
+        <button class="btn" type="button" disabled>Desactivado</button>
+        <button class="btn btn-icon" type="button" aria-label="Siguiente">›</button>
+        <a class="btn" href="#sg-buttons">Enlace como botón</a>
+      </div>
+    </section>
+
+    <section class="card" style="padding:1.5rem;display:grid;gap:1rem" aria-labelledby="sg-fields">
+      <h2 id="sg-fields">Campos</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1rem">
+        <label class="field">Texto<input placeholder="Placeholder" /></label>
+        <label class="field">Selector<select><option>Oscuro</option><option>Claro</option></select></label>
+        <label class="field">Inválido<input aria-invalid="true" value="Valor" /><span class="field-error">Mensaje de error</span></label>
+        <label class="field">Desactivado<input disabled value="No editable" /></label>
+        <label class="field" style="grid-column:1/-1">Área de texto<textarea placeholder="Motivo"></textarea></label>
+      </div>
+    </section>
+
+    <section class="card" style="padding:1.5rem;display:grid;gap:1rem" aria-labelledby="sg-data">
+      <h2 id="sg-data">Datos</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem"><span class="chip">En curso</span><span class="chip chip-warn">Pendiente</span><span class="chip chip-ok">Liquidado</span></div>
+      <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:0">
+        <div class="metric metric-primary"><dt>Abonado</dt><dd>MXN 5,223.00</dd></div>
+        <div class="metric"><dt>Comisión</dt><dd>MXN 0.00</dd></div>
+        <div class="metric"><dt>Saldo</dt><dd>MXN 15,277.00</dd></div>
+      </dl>
+    </section>
+
+    <section class="card" style="padding:1.5rem;display:grid;gap:.5rem" aria-labelledby="sg-states">
+      <h2 id="sg-states">Estados</h2>
+      <StateMessage kind="loading"><span>Cargando cobros…</span></StateMessage>
+      <StateMessage kind="empty" title="Aún no tienes proyectos"><a class="btn btn-primary" href="/projects/new">Crear mi primer proyecto</a></StateMessage>
+      <StateMessage kind="error" title="No se pudo cargar el listado"><button class="btn" type="button">Reintentar</button></StateMessage>
+    </section>
+
+    <section class="card" style="padding:1.5rem" aria-labelledby="sg-dialog">
+      <h2 id="sg-dialog">Diálogo</h2>
+      <button class="btn" type="button" onclick="document.getElementById('sg-dlg').showModal()">Abrir diálogo</button>
+      <dialog class="dialog" id="sg-dlg" aria-labelledby="sg-dlg-title" style="width:min(24rem,calc(100% - 2rem))">
+        <h3 id="sg-dlg-title">Descartar cambios</h3><p>Tienes cambios sin guardar.</p>
+        <form method="dialog" style="display:flex;gap:.5rem;justify-content:end"><button class="btn">Seguir editando</button><button class="btn btn-danger">Descartar</button></form>
+      </dialog>
+    </section>
+  </div>
+</AppLayout>

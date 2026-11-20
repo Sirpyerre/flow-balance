@@ -71,11 +71,11 @@ Revisar la [constitución](../../.specify/memory/constitution.md). Mantener iden
 - [X] T028 [P] [US6] Implementar listados privados en `frontend/src/pages/clients/index.astro` y `frontend/src/pages/projects/index.astro` con alta, detalle, estados vacíos y orden estable. Mostrar cliente en la fila de proyecto, reutilizar lecturas de cuenta y actualizar los destinos de `frontend/src/components/PrivateNavigation.astro` a los listados nuevos.
 - [X] T029 [P] [US6] Adaptar `frontend/src/pages/dashboard.astro` al orden móvil de la referencia. Integrar Registrar cobro a la tarjeta principal, mantener dos indicadores compactos, gráfica, saldos, cobros y acceso a listados. Conservar el reporte detallado y el CSV.
 - [X] T030 [US6] Ajustar navegación y reflujo en `frontend/src/components/PrivateNavigation.astro` y `frontend/src/styles/theme.css`. Validar una columna en formularios y detalles, resumen accesible antes del guardado y áreas seguras.
-- [ ] T031 [US6] Verificar en `frontend/tests/app-usability.spec.ts` navegación, anchura, controles y recorrido de alta. Comparar las referencias a 360 y 1080 px en ambos temas y registrar diferencias en `docs/validation/app-usability.md`.
+- [X] T031 [US6] Verificar en `frontend/tests/app-usability.spec.ts` navegación, anchura, controles y recorrido de alta. Comparar las referencias a 360 y 1080 px en ambos temas y registrar diferencias en `docs/validation/app-usability.md`. Cubierta por el cambio de OpenSpec `refine-app-ui-ux` (tareas 1.5 y 10.2): comparación y capturas en `docs/validation/ui-refinement.md`.
 
 ## Fase 9 · Revisión transversal
 
-- [ ] T032 Ejecutar suites, revisión constitucional, comprobaciones de migración y los recorridos de `specs/006-improve-app-usability/quickstart.md`. Registrar evidencia por historia, privacidad y pendientes físicos en `docs/validation/app-usability.md`.
+- [X] T032 Ejecutar suites, revisión constitucional, comprobaciones de migración y los recorridos de `specs/006-improve-app-usability/quickstart.md`. Registrar evidencia por historia, privacidad y pendientes físicos en `docs/validation/app-usability.md`. Evidencia en `docs/validation/ui-refinement.md`. Quedan como pendientes físicos la reapertura de la PWA en un teléfono y el zoom al 200 % en un dispositivo real.
 
 ## Dependencias y orden de ejecución
 

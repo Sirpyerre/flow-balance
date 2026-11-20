@@ -25,6 +25,8 @@
   --ok-text: #6ee7a8;
   --ok-bg: #0f2a1d;
   --gradient: linear-gradient(90deg, var(--accent), var(--rose));
+  /* Darker stops so white button text keeps >= 4.5:1 along the whole gradient (worst point 4.7:1). */
+  --gradient-action: linear-gradient(90deg, #7c3aed, #e11d48);
   --glow: rgb(139 92 246 / 35%);
   --overlay: rgb(0 0 0 / 60%);
   --focus-ring: 0 0 0 3px rgb(139 92 246 / 25%);
@@ -73,6 +75,7 @@
   --ok-text: #0b5b36;
   --ok-bg: #dcf5e7;
   --gradient: linear-gradient(90deg, var(--accent), var(--accent));
+  --gradient-action: var(--accent);
   --focus-ring: 0 0 0 3px rgb(72 21 210 / 25%);
 }
 @media (prefers-reduced-motion: reduce) {

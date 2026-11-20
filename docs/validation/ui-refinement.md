@@ -97,9 +97,9 @@ Diferencias frente a las referencias de 006 que se mantienen: la navegación lat
 | Chip liquidado | 9.98 | 7.12 | 4.5 |
 | Navegación, sección activa | 9.10 | 8.29 | 4.5 |
 | Navegación, estado normal | 14.74 | 10.38 | 4.5 |
-| Botón primario, texto blanco | 4.23 sobre violeta, 3.67 sobre rosa | 9.08 | 4.5 |
+| Botón primario, texto blanco | 4.7 como mínimo (antes 4.23 y 3.67) | 9.08 | 4.5 |
 
-**Pendiente de decisión de diseño.** En tema oscuro el botón primario usa un degradado de #8B5CF6 a #F43F5E con texto blanco de 14 px en peso 600. Ambos extremos quedan por debajo de 4.5:1, pero es la identidad definida en `docs/desing/desing-frontend.md`. No se cambió.
+**Resuelto.** El degradado de #8B5CF6 a #F43F5E dejaba el texto blanco en 4.23:1 y 3.67:1. El botón primario oscuro usa ahora `--gradient-action` (#7C3AED a #E11D48): 5.7:1 en el extremo violeta, 4.7:1 en el rosa y mínimo 4.7:1 a lo largo del degradado (muestreado cada 1 %). `--gradient` se conserva en barras de progreso y adornos sin texto.
 
 ### Pruebas
 
@@ -120,5 +120,5 @@ Sin cambios de API, esquema ni reglas monetarias; no se tocó `src/` ni `db/`. I
 
 ### Cumplimiento de los requisitos
 
-- **Incumplido:** el texto blanco del botón primario oscuro (degradado #8B5CF6 a #F43F5E) queda en 4.23:1 y 3.67:1, bajo el AA de 4.5:1 que exige `ui-design-system`. Hay que decidir entre oscurecer los extremos del degradado, por ejemplo #7C3AED a #E11D48, o exceptuar el degradado de marca en la especificación. Debe resolverse antes de archivar el cambio.
+- **Cumplido tras el ajuste:** el botón primario oscuro usa `--gradient-action` (mínimo 4.7:1 con texto blanco).
 - **Colores literales:** solo quedan los de `tokens.css`, los cuatro colores de íconos de la landing en `index.astro` y los `theme-color` del layout, que son valores para el navegador.

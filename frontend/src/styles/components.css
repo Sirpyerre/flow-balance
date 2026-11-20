@@ -7,7 +7,7 @@
   transition: border-color var(--duration), background-color var(--duration);
 }
 .btn:hover, .button:hover, button:hover:not(:disabled) { border-color: var(--accent); }
-.btn-primary, .button.primary, .auth-card button[type=submit] { background: var(--gradient); color: var(--on-accent); border-color: transparent; }
+.btn-primary, .button.primary, .auth-card button[type=submit] { background: var(--gradient-action); color: var(--on-accent); border-color: transparent; }
 .btn-danger, .button.danger, button.danger { color: var(--danger); border-color: var(--danger); }
 .btn-icon { width: var(--control-h); padding: 0; }
 button:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }

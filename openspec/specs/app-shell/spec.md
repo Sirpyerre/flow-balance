@@ -1,8 +1,9 @@
-## Purpose
+# app-shell Specification
 
+## Purpose
 Definir el marco de las pantallas privadas: navegación, encabezado de página y cambio de tema, de modo que el usuario siempre sepa dónde está y cómo avanzar.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Navegación adaptativa
 Las pantallas privadas MUST mostrar navegación lateral en escritorio y barra inferior a 700 px o menos, con etiquetas visibles y la sección activa marcada con `aria-current` y un indicador visual. La barra inferior MUST respetar el área segura y MUST NOT cubrir el contenido.
@@ -31,6 +32,10 @@ Cada pantalla privada MUST iniciar con un encabezado con título, contexto secun
 
 ### Requirement: Cambio de tema accesible
 El control de tema MUST tener nombre accesible y estado, estar disponible en la landing y en las pantallas privadas, y conservar la preferencia sin mostrar el tema equivocado en el primer renderizado.
+
+#### Scenario: Interruptor
+- **WHEN** el usuario activa el control de tema
+- **THEN** el control es un interruptor con rol `switch`, nombre «Modo oscuro» y `aria-checked`, mide al menos 44 px de alto y muestra un sol o una luna en la perilla según el tema
 
 #### Scenario: Recarga
 - **WHEN** el usuario recarga después de elegir tema claro

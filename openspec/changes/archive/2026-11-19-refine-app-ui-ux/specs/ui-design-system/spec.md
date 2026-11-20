@@ -49,6 +49,14 @@ Las vistas que cargan datos MUST mostrar estados de carga, vacío y error con un
 ### Requirement: Accesibilidad visual
 El foco MUST ser visible con contraste suficiente en ambos temas. El texto y los controles MUST cumplir contraste WCAG AA. Las animaciones MUST respetar la preferencia de movimiento reducido.
 
+#### Scenario: Botón primario en tema oscuro
+- **WHEN** se muestra el botón primario con texto blanco en tema oscuro
+- **THEN** el contraste del texto es de al menos 4.5:1 en todo el degradado de fondo
+
+#### Scenario: Importes con separador de miles
+- **WHEN** se muestra un importe de 1000 o más en cualquier pantalla
+- **THEN** la parte entera agrupa miles con coma y conserva los decimales recibidos, por ejemplo `MXN 22,000.00`
+
 #### Scenario: Navegación con teclado
 - **WHEN** el usuario recorre una pantalla con Tab
 - **THEN** cada control muestra un anillo de foco visible sobre su fondo en ambos temas

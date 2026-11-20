@@ -67,3 +67,11 @@
 - [x] 10.2 Generar capturas finales en `docs/validation/screens/after/` a 360 y 1080 px en ambos temas y registrar la comparación con las referencias; verificar cuatro capturas por pantalla clave.
 - [x] 10.3 Ejecutar Astro build, PHPUnit y Playwright completos y registrar resultados, y los pendientes físicos (PWA en teléfono, zoom al 200 %) en `docs/validation/ui-refinement.md`; verificar que todos los resultados quedan documentados.
 - [x] 10.4 Cerrar T032 de `specs/006-improve-app-usability/tasks.md` con la evidencia anterior; verificar que no quedan tareas abiertas en 006.
+
+## 11. Ajustes posteriores a la revisión
+
+- [x] 11.1 Oscurecer el degradado del botón primario con `--gradient-action` en `tokens.css` y `components.css`; verificar mínimo 4.5:1 a lo largo del degradado.
+- [x] 11.2 Sustituir el selector de tema por un interruptor accesible en `ThemeSelector.astro` y `components.css`, y actualizar `app-usability.spec.ts`; verificar a 360 y 1080 px en ambos temas.
+- [x] 11.3 Reordenar «Registrar cobro» y «Editar cobro» en dos columnas con el resumen al lado (`screens.css`, `PaymentCorrections.tsx`); verificar a 360 y 1313 px.
+- [x] 11.4 Mostrar la fecha de creación y el conteo de proyectos en listados y en «Clientes registrados»: campo `createdOn` en `PostgresAccountDataReader`, `createdLabel` en `income-api.ts` y aserción en `AccountAccessTest`; verificar PHPUnit y capturas a 360 y 1313 px.
+- [x] 11.5 Agrupar miles en `amountLabel` y actualizar los textos esperados en Playwright; verificar la suite completa.

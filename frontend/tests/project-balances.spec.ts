@@ -47,7 +47,7 @@ test('shows current balances, traces payments and keeps the monthly report indep
   }
   await expect(balances.getByRole('link', { name: 'Identidad visual' })).toBeVisible();
   await balances.getByRole('link', { name: 'Identidad visual' }).click();
-  await expect(page.getByText('MXN 1200.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('MXN 1,200.00', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: /2025-11-30/ }).click();
   await expect(page.getByRole('heading', { name: 'Detalle del cobro' })).toBeVisible();
   await write(page.request, origin, '/api/payments', { ...payment, clientPaidAmount: '1200', paidOn: '2025-12-02' });

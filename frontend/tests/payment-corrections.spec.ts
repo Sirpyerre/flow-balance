@@ -56,7 +56,7 @@ test('edits, retries and removes a payment from a mobile viewport', async ({ pag
   }, { times: 1 });
   await form.getByRole('button', { name: 'Guardar cambios' }).click();
   await form.getByRole('button', { name: 'Reintentar guardado' }).click();
-  await expect(page.getByText('MXN 2500.00', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('MXN 2,500.00', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('region', { name: 'Pagos del proyecto' }).getByText('1 de 1 pago recibido')).toBeVisible();
 
   let releaseSummary!: () => void;
@@ -104,5 +104,5 @@ test('edits, retries and removes a payment from a mobile viewport', async ({ pag
   await dialog.getByRole('button', { name: 'Confirmar eliminación' }).click();
   await expect(page.getByRole('heading', { name: 'Identidad visual' })).toBeVisible();
   await expect(page.getByText('Aún no hay cobros.')).toBeVisible();
-  await expect(page.getByText('MXN 5000.00', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('MXN 5,000.00', { exact: true })).toHaveCount(2);
 });

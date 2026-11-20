@@ -33,7 +33,7 @@ test('converts USD, corrects currency and exports the selected month', async ({ 
   await page.getByLabel('Importe (USD)').fill('100');
   await page.getByLabel('Comisión (USD)').fill('5');
   await page.getByLabel('Impuestos (USD)').fill('3');
-  await expect(page.locator('output')).toContainText('MXN 1725.00');
+  await expect(page.locator('output')).toContainText('MXN 1,725.00');
   await expect(page.locator('output')).toContainText('USD 92.00');
   await page.getByRole('button', { name: 'Guardar cobro' }).click();
   await page.getByRole('link', { name: 'Ver detalle del cobro' }).click();
@@ -50,7 +50,7 @@ test('converts USD, corrects currency and exports the selected month', async ({ 
   await correction.getByLabel('Impuestos descontados (MXN)').fill('50');
   await correction.getByRole('button', { name: 'Guardar cambios' }).click();
   await expect(correction).toBeHidden();
-  await expect(page.getByText('MXN 1350.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('MXN 1,350.00', { exact: true })).toBeVisible();
 
   await write(`/api/payments/${paymentId}/charges`, {
     chargeType: 'tax', currency: 'MXN', amount: '75', paidOn: '2025-12-01',
@@ -80,7 +80,7 @@ test('converts USD, corrects currency and exports the selected month', async ({ 
   await correction.getByLabel('Impuestos descontados (USD)').fill('3');
   await correction.getByRole('button', { name: 'Guardar cambios' }).click();
   await expect(page.getByText('18 MXN por USD', { exact: true })).toBeVisible();
-  await expect(page.getByText('MXN 1656.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('MXN 1,656.00', { exact: true })).toBeVisible();
 
   await page.route(`**/api/projects/${project.id}`, async route => {
     const response = await route.fetch();

@@ -46,7 +46,7 @@ test('registers a project, records income and charges, and opens the monthly rep
   await page.getByLabel('Importe (MXN)').fill('3000');
   await page.getByLabel('Comisión').fill('150.25');
   await page.getByLabel('Impuestos').fill('49.75');
-  await expect(page.getByText('Dinero recibido al cobrar: MXN 2800.00')).toBeVisible();
+  await expect(page.getByText('Dinero recibido al cobrar: MXN 2,800.00')).toBeVisible();
 
   let savedId: string | undefined;
   const keys: string[] = [];

@@ -55,5 +55,5 @@ Entrega por grupos de tareas, cada uno desplegable por separado. No hay migraci�
 ## Open Questions
 
 - ¿Se conserva el botón primario sólido en el tema claro? La decisión 6 asume que sí. Las capturas finales se ven coherentes.
-- El degradado del botón primario oscuro queda bajo 4.5:1 con texto blanco (4.23 y 3.67). Requiere una decisión de diseño sobre la identidad y no se cambió.
+- Resuelta: el degradado del botón primario oscuro (4.23 y 3.67) se sustituyó por `--gradient-action` (`#7C3AED → #E11D48`, mínimo 4.7:1). `--gradient` queda para barras de progreso y adornos sin texto.
 - ¿Se quieren ilustraciones propias en los estados vacíos? El diseño asume un ícono lineal simple, sin recursos nuevos.

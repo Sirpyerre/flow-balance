@@ -33,7 +33,12 @@ export async function incomeRequest<T>(
   return data as T;
 }
 
-export const amountLabel = (amount: string, currency = 'MXN') => `${currency} ${amount}`;
+// Groups thousands on the decimal string itself so no float rounding can touch a monetary value.
+export function amountLabel(amount: string, currency = 'MXN') {
+  const parts = /^(-?)(\d+)(\.\d+)?$/.exec(amount);
+  if (!parts) return `${currency} ${amount}`;
+  return `${currency} ${parts[1]}${parts[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${parts[3] ?? ''}`;
+}
 export const resourceQuery = (key: string, id: string) => new URLSearchParams({ [key]: id }).toString();
 
 export type Client = { id: string; name: string; createdOn?: string };

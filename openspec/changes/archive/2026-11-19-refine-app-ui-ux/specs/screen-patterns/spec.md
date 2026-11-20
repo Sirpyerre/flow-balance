@@ -25,6 +25,10 @@ Los listados de cobros, proyectos y clientes MUST mostrar encabezado con acción
 - **WHEN** un cliente o proyecto tiene un nombre muy largo
 - **THEN** el texto se ajusta sin desbordar y las acciones siguen visibles
 
+#### Scenario: Fecha de creación
+- **WHEN** se muestra un cliente o un proyecto en un listado o en el panel «Clientes registrados»
+- **THEN** la fila incluye «Creado el» con la fecha de alta en formato es-MX, y el listado de clientes indica además cuántos proyectos tiene cada uno
+
 ### Requirement: Formularios en una estructura estable
 Los formularios MUST agrupar campos por tema, mostrar etiquetas persistentes, errores junto al campo con resumen accesible, y barra de acciones con primaria y secundaria. Con panel de apoyo, MUST usar dos columnas en escritorio y una a 360 px con el resumen visible antes de guardar.
 

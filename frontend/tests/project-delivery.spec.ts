@@ -34,7 +34,7 @@ test('edits project delivery independently of collection status', async ({ page,
   await delivery.getByRole('button', { name: 'Guardar estado' }).click();
   await expect(delivery.getByRole('status')).toContainText('Entregado');
   await expect(page.getByText('Pendiente', { exact: true })).toBeVisible();
-  await expect(page.locator('.metric-primary')).toContainText('MXN 5000.00');
+  await expect(page.locator('.metric-primary')).toContainText('MXN 5,000.00');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 
   await write('/api/payments', { projectId: project.id, paidOn: '2025-11-15', currency: 'MXN', clientPaidAmount: '5000', sourceType: 'direct_client' });

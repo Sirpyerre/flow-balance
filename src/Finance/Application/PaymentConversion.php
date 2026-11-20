@@ -8,11 +8,29 @@ use PDO;
 
 final readonly class PaymentConversion
 {
-    public const PAYMENT_AMOUNT = 'payment_amount_mxn(client_paid_amount, currency, exchange_rate)';
-
-    public const REPORT_PAYMENT_AMOUNT = "CASE WHEN currency = 'MXN' THEN client_paid_amount ELSE " . self::PAYMENT_AMOUNT . ' END';
-
     public function __construct(private PDO $database) {}
+
+    /**
+     * SQL for the MXN value of an amount, rounded to cents with halves moving away from zero. It is NULL for a
+     * dollar amount without an exchange rate. An expression and not a stored function, so the application user
+     * needs no routine privileges (design D8).
+     */
+    public static function mxn(string $amount, string $currency = 'currency', string $rate = 'exchange_rate'): string
+    {
+        return "CASE {$currency} WHEN 'MXN' THEN ROUND({$amount}, 2) WHEN 'USD' THEN ROUND({$amount} * {$rate}, 2) END";
+    }
+
+    /** The MXN value of a payment's client-paid amount. */
+    public static function paymentAmount(): string
+    {
+        return self::mxn('client_paid_amount');
+    }
+
+    /** Like paymentAmount(), but pesos keep the stored precision for the reports. */
+    public static function reportPaymentAmount(): string
+    {
+        return "CASE WHEN currency = 'MXN' THEN client_paid_amount ELSE " . self::paymentAmount() . ' END';
+    }
 
     public static function rate(string $currency, mixed $value): ?string
     {
@@ -31,18 +49,20 @@ final readonly class PaymentConversion
 
     public function equivalents(PaymentAmounts $amounts, string $currency, ?string $rate): ?array
     {
-        $query = $this->database->prepare(<<<'SQL'
+        // Each CAST is as wide as the column it mirrors: a DECIMAL without precision would truncate (design D24).
+        $paid = self::mxn('amount', 'currency', 'rate');
+        $fee = self::mxn('fee', 'currency', 'rate');
+        $deductions = self::mxn('(fee + tax)', 'currency', 'rate');
+        $query = $this->database->prepare(<<<SQL
             WITH input AS (
-                SELECT CAST(? AS numeric) AS amount, CAST(? AS numeric) AS fee, CAST(? AS numeric) AS tax,
-                       CAST(? AS text) AS currency, CAST(? AS numeric) AS rate
+                SELECT CAST(? AS DECIMAL(22,8)) AS amount, CAST(? AS DECIMAL(22,8)) AS fee, CAST(? AS DECIMAL(22,8)) AS tax,
+                       CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_nopad_bin AS currency, CAST(? AS DECIMAL(26,12)) AS rate
             ), converted AS (
-                SELECT payment_amount_mxn(amount, currency, rate) AS paid,
-                       payment_amount_mxn(fee, currency, rate) AS fee,
-                       payment_amount_mxn(fee + tax, currency, rate) AS deductions
+                SELECT {$paid} AS paid, {$fee} AS fee, {$deductions} AS deductions
                 FROM input
             )
-            SELECT paid::text AS "clientPaidAmount", fee::text AS "platformFee",
-                   (deductions - fee)::text AS "withheldTaxAmount", (paid - deductions)::text AS "receivedAmount"
+            SELECT CAST(paid AS CHAR) AS clientPaidAmount, CAST(fee AS CHAR) AS platformFee,
+                   CAST(deductions - fee AS CHAR) AS withheldTaxAmount, CAST(paid - deductions AS CHAR) AS receivedAmount
             FROM converted
             SQL);
         $query->execute([$amounts->clientPaidAmount, $amounts->platformFee, $amounts->withheldTaxAmount, $currency, $rate]);

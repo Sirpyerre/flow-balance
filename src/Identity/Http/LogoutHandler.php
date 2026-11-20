@@ -18,7 +18,7 @@ final class LogoutHandler implements RequestHandlerInterface
         $session = $request->getAttribute(SessionInterface::class);
         $database = $request->getAttribute(PDO::class);
         $query = $database->prepare(
-            "UPDATE server_sessions SET revoked_at = CURRENT_TIMESTAMP, payload = '{}'::jsonb
+            "UPDATE server_sessions SET revoked_at = CURRENT_TIMESTAMP(6), payload = '{}'
              WHERE token_hash = ? AND revoked_at IS NULL"
         );
         $query->execute([hash('sha256', $session->getId())]);

@@ -13,8 +13,7 @@ final readonly class CreateClient
     public function create(string $userId, string $name): string
     {
         $input = (new OwnedResourceChanges())->validate('clients', ['name' => $name]);
-        $query = $this->database->prepare('INSERT INTO clients (user_id, name) VALUES (?, ?) RETURNING id::text');
-        $query->execute([$userId, $input['name']]);
-        return $query->fetchColumn();
+        $this->database->prepare('INSERT INTO clients (user_id, name) VALUES (?, ?)')->execute([$userId, $input['name']]);
+        return $this->database->lastInsertId();
     }
 }

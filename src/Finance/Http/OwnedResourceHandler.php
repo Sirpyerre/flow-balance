@@ -7,7 +7,7 @@ namespace FlowBalance\Finance\Http;
 use FlowBalance\Finance\Application\OwnedResourceChanges;
 use FlowBalance\Finance\Application\IncomeValidation;
 use FlowBalance\Finance\Application\ProjectAgreement;
-use FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository;
+use FlowBalance\Finance\Infrastructure\SqlOwnedResourceRepository;
 use InvalidArgumentException;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Session\SessionInterface;
@@ -25,7 +25,7 @@ final readonly class OwnedResourceHandler implements RequestHandlerInterface
         $userId = $request->getAttribute(SessionInterface::class)->get('userId');
         $id = $request->getAttribute('id');
         $database = $request->getAttribute(PDO::class);
-        $repository = new PostgresOwnedResourceRepository($database);
+        $repository = new SqlOwnedResourceRepository($database);
         $writing = $request->getMethod() === 'PATCH';
         $resource = OwnedResourceChanges::identifier($id)
             ? ($writing ? $repository->find($this->type, $userId, $id, true)

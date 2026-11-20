@@ -6,7 +6,7 @@ namespace FlowBalance\Finance\Http;
 
 use DomainException;
 use FlowBalance\Finance\Application\{DeletePayment, EditPayment, IncomeNotFound, IncomeValidation, OwnedResourceChanges, PaymentVersionConflict};
-use FlowBalance\Finance\Infrastructure\{PostgresOwnedResourceRepository, PostgresPaymentCorrectionRepository};
+use FlowBalance\Finance\Infrastructure\{SqlOwnedResourceRepository, SqlPaymentCorrectionRepository};
 use Laminas\Diactoros\Response\{EmptyResponse, JsonResponse};
 use Mezzio\Session\SessionInterface;
 use PDO;
@@ -18,7 +18,7 @@ final class PaymentCorrectionHandler implements RequestHandlerInterface
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
         $database = $request->getAttribute(PDO::class);
-        $repository = new PostgresPaymentCorrectionRepository($database);
+        $repository = new SqlPaymentCorrectionRepository($database);
         $userId = $request->getAttribute(SessionInterface::class)->get('userId');
         $id = $request->getAttribute('id');
         $body = (array) $request->getParsedBody();
@@ -42,7 +42,7 @@ final class PaymentCorrectionHandler implements RequestHandlerInterface
                 return new JsonResponse($edit->preview($userId, $id, $body, $version));
             }
             $edit->edit($userId, $id, $body, $version, $request->getHeaderLine('Idempotency-Key'));
-            return new JsonResponse((new PostgresOwnedResourceRepository($database))->detail('payments', $userId, $id));
+            return new JsonResponse((new SqlOwnedResourceRepository($database))->detail('payments', $userId, $id));
         } catch (IncomeNotFound) {
             return self::error(404, 'not_found', 'Recurso no disponible');
         } catch (PaymentVersionConflict) {

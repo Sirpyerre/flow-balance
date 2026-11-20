@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Dotenv\Dotenv;
+use FlowBalance\Identity\Domain\EmailAddress;
 use FlowBalance\Identity\Infrastructure\NativePasswordHasher;
 
 $root = dirname(__DIR__, 2);
@@ -23,14 +24,14 @@ try {
     $password = 'FlowBalance-Demo-2026!';
     $database = (require $root . '/config/database.php')->connect();
     $statement = $database->prepare(
-        'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)
-         ON CONFLICT (email_normalized) DO NOTHING'
+        'INSERT INTO users (name, email, email_normalized, password_hash) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE email_normalized = email_normalized'
     );
     $hasher = new NativePasswordHasher();
-    $statement->execute(['Cuenta de prueba', $email, $hasher->hash($password)]);
+    $statement->execute(['Cuenta de prueba', $email, EmailAddress::normalize($email), $hasher->hash($password)]);
 
     $query = $database->prepare('SELECT password_hash FROM users WHERE email_normalized = ?');
-    $query->execute([$email]);
+    $query->execute([EmailAddress::normalize($email)]);
     if (!$hasher->verify($password, (string) $query->fetchColumn())) {
         fwrite(STDERR, "El correo de prueba ya existe con otra contraseña. Conservé la cuenta.\n");
         exit(1);
@@ -38,6 +39,6 @@ try {
 
     echo "Cuenta de prueba disponible.\nCorreo: {$email}\nContraseña: {$password}\n";
 } catch (Throwable) {
-    fwrite(STDERR, "No se pudo crear la cuenta de prueba. Revisa .env, PostgreSQL y las migraciones.\n");
+    fwrite(STDERR, "No se pudo crear la cuenta de prueba. Revisa .env, MariaDB y las migraciones.\n");
     exit(1);
 }

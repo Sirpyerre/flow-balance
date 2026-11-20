@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace FlowBalance\Finance\Application;
 
-use FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository;
+use FlowBalance\Finance\Infrastructure\SqlOwnedResourceRepository;
 
 final class ProjectAgreement
 {
@@ -16,7 +16,7 @@ final class ProjectAgreement
         return $count;
     }
 
-    public static function recordAdjustment(PostgresOwnedResourceRepository $repository, string $userId, string $projectId, string $amount, mixed $reason): void
+    public static function recordAdjustment(SqlOwnedResourceRepository $repository, string $userId, string $projectId, string $amount, mixed $reason): void
     {
         $project = $repository->detail('projects', $userId, $projectId);
         $preview = self::preview($project, $amount);

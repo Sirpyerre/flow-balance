@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace FlowBalance\Finance\Application;
@@ -11,7 +12,7 @@ final readonly class PaymentExcess
 
     public function project(string $userId, string $projectId, bool $lock = false): ?array
     {
-        $query = $this->database->prepare('SELECT round(agreed_amount, 2)::text AS agreed_amount FROM projects WHERE user_id = ? AND id = ?'
+        $query = $this->database->prepare('SELECT CAST(ROUND(agreed_amount, 2) AS CHAR) AS agreed_amount FROM projects WHERE user_id = ? AND id = ?'
             . ($lock ? ' FOR UPDATE' : ''));
         $query->execute([$userId, $projectId]);
         return $query->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -19,13 +20,14 @@ final readonly class PaymentExcess
 
     public function calculate(string $userId, string $projectId, ?string $agreedAmount, string $amount, ?string $replaceId = null): array
     {
-        $converted = PaymentConversion::PAYMENT_AMOUNT;
+        $converted = PaymentConversion::paymentAmount();
+        // Both amounts arrive already rounded to cents, so DECIMAL(22,2) loses nothing and keeps the result at two decimals.
         $query = $this->database->prepare("WITH projected AS (
-            SELECT round(COALESCE(SUM({$converted}), 0) + CAST(? AS numeric), 2) AS total
+            SELECT ROUND(COALESCE(SUM({$converted}), 0) + CAST(? AS DECIMAL(22,2)), 2) AS total
             FROM payments WHERE user_id = ? AND project_id = ?
-            AND deleted_at IS NULL AND id IS DISTINCT FROM CAST(? AS bigint)
-        ) SELECT total::text, CASE WHEN CAST(? AS numeric) IS NULL THEN NULL
-            ELSE GREATEST(total - CAST(? AS numeric), 0.00)::text END AS excess FROM projected");
+            AND deleted_at IS NULL AND NOT (id <=> CAST(? AS SIGNED))
+        ) SELECT CAST(total AS CHAR) AS total, CASE WHEN CAST(? AS DECIMAL(22,2)) IS NULL THEN NULL
+            ELSE CAST(GREATEST(total - CAST(? AS DECIMAL(22,2)), 0.00) AS CHAR) END AS excess FROM projected");
         $query->execute([$amount, $userId, $projectId, $replaceId, $agreedAmount, $agreedAmount]);
         $row = $query->fetch(PDO::FETCH_ASSOC);
         return [

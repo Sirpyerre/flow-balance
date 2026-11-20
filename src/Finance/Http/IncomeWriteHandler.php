@@ -17,7 +17,7 @@ use FlowBalance\Finance\Application\PaymentConversion;
 use FlowBalance\Finance\Application\PaymentInput;
 use FlowBalance\Finance\Application\RecordPayment;
 use FlowBalance\Finance\Application\RecordPaymentCharge;
-use FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository;
+use FlowBalance\Finance\Infrastructure\SqlOwnedResourceRepository;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Session\SessionInterface;
 use PDO;
@@ -66,7 +66,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
 
     private function agreementPreview(PDO $database, string $userId, mixed $id, array $body): JsonResponse
     {
-        $project = (new PostgresOwnedResourceRepository($database))->detail('projects', $userId, $this->identifier($id));
+        $project = (new SqlOwnedResourceRepository($database))->detail('projects', $userId, $this->identifier($id));
         if (!$project) {
             throw new IncomeNotFound();
         }
@@ -77,7 +77,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
     {
         $name = PaymentInput::text($body['name'] ?? null, 'name', 100);
         $client = $this->identifier($body['clientId'] ?? null);
-        $repository = new PostgresOwnedResourceRepository($database);
+        $repository = new SqlOwnedResourceRepository($database);
         if (!$repository->find('clients', $userId, $client, true)) {
             throw new IncomeNotFound();
         }
@@ -112,7 +112,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
         [$source, $sourceName] = PaymentInput::source($body);
         $reason = PaymentInput::optionalText($body['excessReason'] ?? null, 'excessReason');
         $result = (new RecordPayment($database))->capture($userId, $projectId, $date, PaymentInput::key($key), $amounts, $source, $sourceName, $reason, $currency, $rate);
-        $detail = (new PostgresOwnedResourceRepository($database))->detail('payments', $userId, $result['id']);
+        $detail = (new SqlOwnedResourceRepository($database))->detail('payments', $userId, $result['id']);
         $created = $result['created'];
         unset($result['created']);
         return new JsonResponse([...$detail, ...$result], $created ? 201 : 200);
@@ -121,7 +121,7 @@ final readonly class IncomeWriteHandler implements RequestHandlerInterface
     private function charge(PDO $database, string $userId, mixed $id, array $body, string $key): JsonResponse
     {
         $id = $this->identifier($id);
-        if (!(new PostgresOwnedResourceRepository($database))->find('payments', $userId, $id)) {
+        if (!(new SqlOwnedResourceRepository($database))->find('payments', $userId, $id)) {
             throw new IncomeNotFound();
         }
         PaymentInput::currency($body['currency'] ?? null);

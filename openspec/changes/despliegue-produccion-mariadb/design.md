@@ -317,13 +317,20 @@ lo convierte en el 503 genérico (`config/routes.php:44-48`).
 | `agg(x) FILTER (WHERE c)` | `agg(CASE WHEN c THEN x END)` |
 | `x::text`, `CAST(x AS text)` | `CAST(x AS CHAR)` |
 | `to_char(d, 'YYYY-MM')` | `DATE_FORMAT(d, '%Y-%m')` |
-| `CAST(? AS numeric)` | `CAST(? AS DECIMAL(16,2))` para importes y `DECIMAL(20,6)` para la tasa |
+| `CAST(? AS numeric)` | `CAST(? AS DECIMAL(22,8))` para importes y `DECIMAL(26,12)` para la tasa (tan anchos como su columna, D2); `DECIMAL(22,2)` solo para un valor que ya viene redondeado a centavos. Si el parámetro va directo a una columna, sin `CAST` |
+| `INSERT ... SELECT ... ON CONFLICT DO NOTHING` | `INSERT ... SELECT ... ON DUPLICATE KEY UPDATE tabla.columna = tabla.columna`, con la columna **calificada**: `id` sería ambiguo entre la tabla de origen y la de destino |
+| `ORDER BY name` (PostgreSQL ordena por bytes con `C.UTF-8`) | `ORDER BY name COLLATE utf8mb4_bin`; la colación de la columna ignora mayúsculas y acentos |
+| `COUNT(*) FILTER (WHERE c)` en una consulta con `LEFT JOIN` | `COUNT(CASE WHEN <fila existe> AND c THEN 1 END)`: la fila sin coincidencia no debe contarse |
+| `json_agg(...)` y totales en una consulta | Filas planas con los totales en cada fila mediante `SUM(...) OVER ()`; el JSON se arma en PHP |
+| Booleanos (`NOT EXISTS`, `x IS NULL`) | MariaDB los devuelve como `1`/`0`; se convierten con `(bool)` para que la API siga entregando `true`/`false` |
 | `(a, b) < (?, ?)` | igual (comparación de filas soportada) |
 | `GREATEST`, `COALESCE`, `ROUND` | igual |
 
-La fila de `CAST ... numeric` es una trampa: en MariaDB `DECIMAL` sin parámetros es `DECIMAL(10,0)` y
-truncaría los importes sin avisar. La precisión se fija en cada `CAST`, dimensionada para que
-`importe × tasa` quepa (`DECIMAL(36,8)`); las fronteras de `PaymentRoundingTest` lo comprueban.
+La fila de `CAST ... numeric` es una trampa doble. En MariaDB `DECIMAL` sin parámetros es `DECIMAL(10,0)` y
+truncaría los importes sin avisar. Y un `CAST` a una escala menor que la de la columna (por ejemplo
+`DECIMAL(16,2)` para un importe) redondearía antes de que el `CHECK` de D2 pudiera rechazarlo. La precisión
+se fija en cada `CAST`, tan ancha como la columna que alimenta; `importe × tasa` cabe de sobra (46 dígitos
+de 65). Las fronteras de `PaymentRoundingTest` lo comprueban.
 
 ### D25. Las pruebas de migración tienen su propia base
 

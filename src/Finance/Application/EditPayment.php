@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace FlowBalance\Finance\Application;
 
 use DomainException;
-use FlowBalance\Finance\Infrastructure\PostgresPaymentCorrectionRepository;
+use FlowBalance\Finance\Infrastructure\SqlPaymentCorrectionRepository;
 
 final readonly class EditPayment
 {
-    public function __construct(private PostgresPaymentCorrectionRepository $repository) {}
+    public function __construct(private SqlPaymentCorrectionRepository $repository) {}
 
     public function edit(string $userId, string $id, array $body, string $version, string $key): void
     {

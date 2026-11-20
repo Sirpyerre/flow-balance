@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace FlowBalance\Finance\Http;
 
-use FlowBalance\Finance\Infrastructure\PostgresProjectBalanceReportReader;
+use FlowBalance\Finance\Infrastructure\SqlProjectBalanceReportReader;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Session\SessionInterface;
 use PDO;
@@ -16,7 +16,7 @@ final class ProjectBalanceReportHandler implements RequestHandlerInterface
 {
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $reader = new PostgresProjectBalanceReportReader($request->getAttribute(PDO::class));
+        $reader = new SqlProjectBalanceReportReader($request->getAttribute(PDO::class));
         return new JsonResponse($reader->read($request->getAttribute(SessionInterface::class)->get('userId')));
     }
 }

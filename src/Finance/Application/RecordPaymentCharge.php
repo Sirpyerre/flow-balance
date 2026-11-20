@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace FlowBalance\Finance\Application;
@@ -18,15 +19,18 @@ final readonly class RecordPaymentCharge
             throw new IncomeNotFound();
         }
         $fingerprint = hash('sha256', json_encode([$paymentId, $type, $date, $amount], JSON_THROW_ON_ERROR));
-        $projection = 'id::text, charge_type AS "chargeType", paid_on AS "paidOn", amount::text, currency';
+        $projection = 'CAST(id AS CHAR) AS id, charge_type AS chargeType, paid_on AS paidOn, CAST(ROUND(amount, 2) AS CHAR) AS amount, currency';
+        // A repeated key changes nothing, so the affected-row count tells an insert (1) from a replay (0).
         $query = $this->database->prepare("INSERT INTO payment_charges
             (user_id, payment_id, idempotency_key, request_fingerprint, charge_type, paid_on, amount, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'MXN') ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING {$projection}");
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'MXN') ON DUPLICATE KEY UPDATE idempotency_key = idempotency_key");
         $query->execute([$userId, $paymentId, $key, $fingerprint, $type, $date, $amount]);
-        if ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+        if ($query->rowCount() === 1) {
+            $created = $this->database->prepare("SELECT {$projection} FROM payment_charges WHERE id = ?");
+            $created->execute([$this->database->lastInsertId()]);
             $version = $this->database->prepare('UPDATE payments SET version = version + 1 WHERE user_id = ? AND id = ?');
             $version->execute([$userId, $paymentId]);
-            return [$row, true];
+            return [$created->fetch(PDO::FETCH_ASSOC), true];
         }
         $query = $this->database->prepare("SELECT {$projection}, request_fingerprint FROM payment_charges WHERE user_id = ? AND idempotency_key = ?");
         $query->execute([$userId, $key]);

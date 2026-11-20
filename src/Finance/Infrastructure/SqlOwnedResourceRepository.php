@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace FlowBalance\Finance\Infrastructure;
 
+use FlowBalance\Finance\Application\DecimalText;
 use FlowBalance\Finance\Application\PaymentAmounts;
 use FlowBalance\Finance\Application\PaymentConversion;
 use FlowBalance\Finance\Application\ProjectBalance;
 use PDO;
 
-final readonly class PostgresOwnedResourceRepository
+final readonly class SqlOwnedResourceRepository
 {
     public function __construct(private PDO $database) {}
 
@@ -21,7 +22,8 @@ final readonly class PostgresOwnedResourceRepository
             "SELECT {$projection} FROM {$type} WHERE user_id = ? AND id = ?{$active}" . ($lock ? ' FOR UPDATE' : '')
         );
         $query->execute([$userId, $id]);
-        return $query->fetch(PDO::FETCH_ASSOC) ?: null;
+        $row = $query->fetch(PDO::FETCH_ASSOC);
+        return $row ? $this->present($type, $row) : null;
     }
 
     public function detail(string $type, string $userId, string $id): ?array
@@ -37,7 +39,8 @@ final readonly class PostgresOwnedResourceRepository
         $resource['project'] = $project;
         $resource['client'] = $this->find('clients', $userId, $project['clientId']);
         $amounts = new PaymentAmounts($resource['clientPaidAmount'], $resource['platformFee'], $resource['withheldTaxAmount'], allowZeroAmount: true);
-        $query = $this->database->prepare('SELECT id::text, charge_type AS "chargeType", paid_on AS "paidOn", amount::text, currency
+        $query = $this->database->prepare('SELECT CAST(id AS CHAR) AS id, charge_type AS chargeType, paid_on AS paidOn,
+                CAST(ROUND(amount, 2) AS CHAR) AS amount, currency
             FROM payment_charges WHERE user_id = ? AND payment_id = ? ORDER BY paid_on, id');
         $query->execute([$userId, $id]);
         $equivalents = (new PaymentConversion($this->database))->equivalents($amounts, $resource['currency'], $resource['exchangeRate']);
@@ -48,30 +51,14 @@ final readonly class PostgresOwnedResourceRepository
 
     private function projectDetail(string $userId, string $id): ?array
     {
-        $amount = PaymentConversion::PAYMENT_AMOUNT;
-        $query = $this->database->prepare(<<<SQL
-            SELECT p.id::text, p.name, p.client_id::text AS "clientId",
-                   round(p.agreed_amount, 2)::text AS "agreedAmount",
-                   p.agreed_currency AS "agreedCurrency", p.agreed_payment_count AS "agreedPaymentCount",
-                   p.acquisition_source AS "acquisitionSource", p.delivery_status AS "deliveryStatus", c.name AS client_name,
-                   NOT EXISTS (SELECT 1 FROM payments WHERE user_id = p.user_id AND project_id = p.id) AS "canChangeClient",
-                   summary.payment_count AS "paymentCount", summary.unconverted_count AS "unconvertedPaymentCount", summary.total AS "clientPaidTotal", summary.payments
+        $query = $this->database->prepare(<<<'SQL'
+            SELECT CAST(p.id AS CHAR) AS id, p.name, CAST(p.client_id AS CHAR) AS clientId,
+                   CAST(ROUND(p.agreed_amount, 2) AS CHAR) AS agreedAmount,
+                   p.agreed_currency AS agreedCurrency, p.agreed_payment_count AS agreedPaymentCount,
+                   p.acquisition_source AS acquisitionSource, p.delivery_status AS deliveryStatus, c.name AS client_name,
+                   NOT EXISTS (SELECT 1 FROM payments WHERE user_id = p.user_id AND project_id = p.id) AS canChangeClient
             FROM projects p
             JOIN clients c ON c.user_id = p.user_id AND c.id = p.client_id
-            CROSS JOIN LATERAL (
-                SELECT COUNT(*) AS payment_count,
-                       COUNT(*) FILTER (WHERE amount IS NULL) AS unconverted_count,
-                       COALESCE(SUM(amount), 0.00)::text AS total,
-                       COALESCE(json_agg(json_build_object('id', id::text, 'paidOn', paid_on,
-                           'currency', currency, 'clientPaidAmount', original_amount::text,
-                           'clientPaidAmountMxn', amount::text, 'conversionPending', amount IS NULL,
-                           'sourceType', source_type, 'sourceName', source_name)
-                           ORDER BY paid_on DESC, id DESC), '[]') AS payments
-                FROM (
-                    SELECT id, paid_on, currency, source_type, source_name, round(client_paid_amount, 2) AS original_amount, {$amount} AS amount
-                    FROM payments WHERE user_id = p.user_id AND project_id = p.id AND deleted_at IS NULL
-                ) own_payments
-            ) summary
             WHERE p.user_id = ? AND p.id = ?
             SQL);
         $query->execute([$userId, $id]);
@@ -79,12 +66,31 @@ final readonly class PostgresOwnedResourceRepository
         if (!$project) {
             return null;
         }
+        $project['canChangeClient'] = (bool) $project['canChangeClient'];
+
+        // The payment list is built here and not with JSON functions, which would emit amounts as numbers.
+        $amount = PaymentConversion::paymentAmount();
+        $own = 'FROM payments WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL';
+        $rows = $this->database->prepare("SELECT CAST(id AS CHAR) AS id, paid_on AS paidOn, currency,
+                CAST(ROUND(client_paid_amount, 2) AS CHAR) AS clientPaidAmount, CAST({$amount} AS CHAR) AS clientPaidAmountMxn,
+                source_type AS sourceType, source_name AS sourceName
+            {$own} ORDER BY paid_on DESC, id DESC");
+        $rows->execute([$userId, $id]);
+        $payments = array_map(static fn (array $row): array => [
+            'id' => $row['id'], 'paidOn' => $row['paidOn'], 'currency' => $row['currency'],
+            'clientPaidAmount' => $row['clientPaidAmount'], 'clientPaidAmountMxn' => $row['clientPaidAmountMxn'],
+            'conversionPending' => $row['clientPaidAmountMxn'] === null,
+            'sourceType' => $row['sourceType'], 'sourceName' => $row['sourceName'],
+        ], $rows->fetchAll(PDO::FETCH_ASSOC));
+        $total = $this->database->prepare("SELECT CAST(COALESCE(SUM({$amount}), 0.00) AS CHAR) {$own}");
+        $total->execute([$userId, $id]);
+
+        $project = [...$project, 'paymentCount' => count($payments),
+            'unconvertedPaymentCount' => count(array_filter($payments, static fn (array $payment): bool => $payment['conversionPending'])),
+            'clientPaidTotal' => $total->fetchColumn(), 'payments' => $payments];
         $project['client'] = ['id' => $project['clientId'], 'name' => $project['client_name']];
         unset($project['client_name']);
-        $project['paymentCount'] = (int) $project['paymentCount'];
-        $project['unconvertedPaymentCount'] = (int) $project['unconvertedPaymentCount'];
         $project['isBalanceProvisional'] = $project['unconvertedPaymentCount'] > 0 && $project['agreedAmount'] !== null;
-        $project['payments'] = json_decode($project['payments'], true, flags: JSON_THROW_ON_ERROR);
         return [...$project, ...ProjectBalance::calculate($project['agreedAmount'], $project['clientPaidTotal'])];
     }
 
@@ -111,12 +117,12 @@ final readonly class PostgresOwnedResourceRepository
             };
         }
         $set = implode(', ', $assignments);
-        $query = $this->database->prepare(
-            "UPDATE {$type} SET {$set}, updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = ? AND id = ? RETURNING {$projection}"
-        );
-        $query->execute([...array_values($changes), $userId, $id]);
-        return $query->fetch(PDO::FETCH_ASSOC);
+        // MariaDB cannot return the row an UPDATE touched: the caller already holds its lock, so a read sees this write.
+        $this->database->prepare("UPDATE {$type} SET {$set}, updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ? AND id = ?")
+            ->execute([...array_values($changes), $userId, $id]);
+        $query = $this->database->prepare("SELECT {$projection} FROM {$type} WHERE user_id = ? AND id = ?");
+        $query->execute([$userId, $id]);
+        return $this->present($type, $query->fetch(PDO::FETCH_ASSOC));
     }
 
     public function recordAgreementRevision(string $userId, string $id, string $previous, string $amount, array $preview, string $reason): void
@@ -127,12 +133,21 @@ final readonly class PostgresOwnedResourceRepository
         $revision->execute([$userId, $id, $previous, $amount, $preview['clientPaidTotal'], $preview['excessAmount'], $reason]);
     }
 
+    /** Formats what the columns cannot: the exchange rate is shown without the zeros its wider column adds. */
+    private function present(string $type, array|false $row): array
+    {
+        if ($type === 'payments' && is_array($row)) {
+            $row['exchangeRate'] = DecimalText::trimmed($row['exchangeRate']);
+        }
+        return $row;
+    }
+
     private function projection(string $type): string
     {
         return match ($type) {
-            'clients' => 'id::text, name',
-            'projects' => 'id::text, name, client_id::text AS "clientId", round(agreed_amount, 2)::text AS "agreedAmount", agreed_currency AS "agreedCurrency", agreed_payment_count AS "agreedPaymentCount", acquisition_source AS "acquisitionSource", delivery_status AS "deliveryStatus"',
-            'payments' => 'id::text, version::text, project_id::text AS "projectId", round(client_paid_amount, 2)::text AS "clientPaidAmount", currency, exchange_rate::text AS "exchangeRate", paid_on AS "paidOn", round(platform_fee, 2)::text AS "platformFee", round(withheld_tax_amount, 2)::text AS "withheldTaxAmount", source_type AS "sourceType", source_name AS "sourceName", excess_reason AS "excessReason"',
+            'clients' => 'CAST(id AS CHAR) AS id, name',
+            'projects' => 'CAST(id AS CHAR) AS id, name, CAST(client_id AS CHAR) AS clientId, CAST(ROUND(agreed_amount, 2) AS CHAR) AS agreedAmount, agreed_currency AS agreedCurrency, agreed_payment_count AS agreedPaymentCount, acquisition_source AS acquisitionSource, delivery_status AS deliveryStatus',
+            'payments' => 'CAST(id AS CHAR) AS id, CAST(version AS CHAR) AS version, CAST(project_id AS CHAR) AS projectId, CAST(ROUND(client_paid_amount, 2) AS CHAR) AS clientPaidAmount, currency, CAST(exchange_rate AS CHAR) AS exchangeRate, paid_on AS paidOn, CAST(ROUND(platform_fee, 2) AS CHAR) AS platformFee, CAST(ROUND(withheld_tax_amount, 2) AS CHAR) AS withheldTaxAmount, source_type AS sourceType, source_name AS sourceName, excess_reason AS excessReason',
         };
     }
 }

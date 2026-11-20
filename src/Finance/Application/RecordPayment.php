@@ -22,17 +22,18 @@ final readonly class RecordPayment
             throw new InvalidArgumentException('Revisa los datos del cobro');
         }
         $fingerprint = hash('sha256', json_encode([$projectId, $decimal, $currency, $paidOn], JSON_THROW_ON_ERROR));
+        // The target column is qualified: the SELECT reads projects, which also has id and user_id. A repeated key
+        // changes nothing, so the affected-row count tells an insert (1) from a replay (0).
         $query = $this->database->prepare('INSERT INTO payments
             (user_id, project_id, client_paid_amount, currency, paid_on, idempotency_key, request_fingerprint)
-            SELECT user_id, id, CAST(? AS numeric), ?, CAST(? AS date), ?, ?
+            SELECT user_id, id, ?, ?, ?, ?, ?
             FROM projects WHERE user_id = ? AND id = ?
-            ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING id::text');
+            ON DUPLICATE KEY UPDATE payments.idempotency_key = payments.idempotency_key');
         $query->execute([$decimal, $currency, $paidOn, $key, $fingerprint, $userId, $projectId]);
-        $id = $query->fetchColumn();
-        if ($id !== false) {
-            return $id;
+        if ($query->rowCount() === 1) {
+            return $this->database->lastInsertId();
         }
-        $query = $this->database->prepare('SELECT id::text, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ?');
+        $query = $this->database->prepare('SELECT CAST(id AS CHAR) AS id, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ?');
         $query->execute([$userId, $key]);
         $existing = $query->fetch(PDO::FETCH_ASSOC);
         if (!$existing) {
@@ -49,14 +50,14 @@ final readonly class RecordPayment
     public function capture(string $userId, string $projectId, string $paidOn, string $key, PaymentAmounts $amounts,
         string $sourceType, ?string $sourceName, ?string $reason, string $currency = 'MXN', ?string $rate = null): array
     {
+        // A key is account-wide, including when concurrent requests target different projects, so the account's
+        // row is the mutex. It is taken before the project row everywhere, which keeps the lock order acyclic.
+        $this->database->prepare('SELECT id FROM users WHERE id = ? FOR UPDATE')->execute([$userId]);
         $excess = new PaymentExcess($this->database);
         $project = $excess->project($userId, $projectId, true);
         if ($project === null) {
             throw new IncomeNotFound();
         }
-        // A key is account-wide, including when concurrent requests target different projects.
-        $lock = $this->database->prepare("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))");
-        $lock->execute(["payment:{$userId}:{$key}"]);
         $input = [
             $projectId, $paidOn, $amounts->clientPaidAmount, $amounts->platformFee,
             $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason,
@@ -65,7 +66,7 @@ final readonly class RecordPayment
             array_push($input, $currency, $rate);
         }
         $fingerprint = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
-        $existing = $this->database->prepare('SELECT id::text, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ? FOR UPDATE');
+        $existing = $this->database->prepare('SELECT CAST(id AS CHAR) AS id, request_fingerprint, deleted_at FROM payments WHERE user_id = ? AND idempotency_key = ? FOR UPDATE');
         $existing->execute([$userId, $key]);
         if ($row = $existing->fetch(PDO::FETCH_ASSOC)) {
             if (!hash_equals($row['request_fingerprint'], $fingerprint)) {
@@ -84,14 +85,13 @@ final readonly class RecordPayment
         $insert = $this->database->prepare("INSERT INTO payments (user_id, project_id, client_paid_amount, currency,
             paid_on, idempotency_key, request_fingerprint, platform_fee, withheld_tax_amount, source_type, source_name, excess_reason, exchange_rate)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING id::text");
+            ON DUPLICATE KEY UPDATE idempotency_key = idempotency_key");
         $insert->execute([$userId, $projectId, $amounts->clientPaidAmount, $currency, $paidOn, $key, $fingerprint,
             $amounts->platformFee, $amounts->withheldTaxAmount, $sourceType, $sourceName, $reason, $rate]);
-        $id = $insert->fetchColumn();
-        if ($id === false) {
+        if ($insert->rowCount() !== 1) {
             throw new DomainException('La clave ya se usó para otro cobro.');
         }
 
-        return ['id' => $id, 'created' => true, ...$projection];
+        return ['id' => $this->database->lastInsertId(), 'created' => true, ...$projection];
     }
 }

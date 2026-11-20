@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace FlowBalance\Finance\Application;
 
-use FlowBalance\Finance\Infrastructure\PostgresPaymentCorrectionRepository;
+use FlowBalance\Finance\Infrastructure\SqlPaymentCorrectionRepository;
 
 final readonly class DeletePayment
 {
-    public function __construct(private PostgresPaymentCorrectionRepository $repository) {}
+    public function __construct(private SqlPaymentCorrectionRepository $repository) {}
 
     public function delete(string $userId, string $id, string $version, array $body): bool
     {

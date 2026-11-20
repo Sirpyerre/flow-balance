@@ -18,7 +18,7 @@ final class AccountAccessTest extends TestCase
     public function testRegistrationLoginAndAccountIsolation(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $container = require $root . '/config/container.php';
@@ -102,7 +102,7 @@ final class AccountAccessTest extends TestCase
     public function testIncomeCaptureRetryAndSeparateCharges(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $container = require $root . '/config/container.php';
@@ -225,7 +225,7 @@ final class AccountAccessTest extends TestCase
     public function testProjectBalanceDetailAndReportUseTheSameOwnedPayments(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $container = require $root . '/config/container.php';
@@ -264,7 +264,7 @@ final class AccountAccessTest extends TestCase
             self::assertSame('0.04', $rounded['clientPaidTotal']);
             self::assertSame('0.26', $rounded['outstandingBalance']);
             self::assertSame(['0.02', '0.02'], array_column($rounded['payments'], 'clientPaidAmount'));
-            $raw = $database->prepare('SELECT DISTINCT client_paid_amount::text FROM payments WHERE project_id = ?');
+            $raw = $database->prepare('SELECT DISTINCT CAST(client_paid_amount AS CHAR) FROM payments WHERE project_id = ?');
             $raw->execute([$fraction]);
             self::assertSame(['0.015000'], $raw->fetchAll(PDO::FETCH_COLUMN));
 
@@ -404,15 +404,15 @@ final class AccountAccessTest extends TestCase
             self::assertSame(200, $this->write($app, "/api/projects/{$historic}", ['clientId' => $newClient], $cookie, 'PATCH')[0]);
 
             $database->beginTransaction();
-            (new \FlowBalance\Finance\Infrastructure\PostgresOwnedResourceRepository($database))->find('projects', $ana, $project, true);
+            (new \FlowBalance\Finance\Infrastructure\SqlOwnedResourceRepository($database))->find('projects', $ana, $project, true);
             $writer->beginTransaction();
             try {
-                $writer->exec("SET LOCAL lock_timeout = '150ms'");
+                $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
                 (new RecordPayment($writer))->capture($ana, $project, '2025-12-02', 'concurrent-agreement',
                     new \FlowBalance\Finance\Application\PaymentAmounts('10.00'), 'direct_client', null, 'Ajuste');
                 self::fail('Expected capture to wait for the project lock');
             } catch (PDOException $error) {
-                self::assertSame('55P03', $error->getCode());
+                self::assertSame(1205, $error->errorInfo[1], 'Expected a lock wait timeout');
             } finally {
                 $writer->rollBack();
                 $database->rollBack();
@@ -431,7 +431,7 @@ final class AccountAccessTest extends TestCase
     public function testCorrectsAndDeletesAnOwnedPaymentWithoutRecreatingIt(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $container = require $root . '/config/container.php';
@@ -498,10 +498,10 @@ final class AccountAccessTest extends TestCase
             self::assertSame(412, $this->write($app, $path, [], $cookie, 'DELETE', version: '"3"')[0]);
             $writer = (require $root . '/config/database.php')->connect();
             $database->beginTransaction();
-            $repo = new \FlowBalance\Finance\Infrastructure\PostgresPaymentCorrectionRepository($database);
+            $repo = new \FlowBalance\Finance\Infrastructure\SqlPaymentCorrectionRepository($database);
             $repo->lock($ana, $payment['id']);
-            $writer->exec("SET lock_timeout = '100ms'");
-            $otherRepository = new \FlowBalance\Finance\Infrastructure\PostgresPaymentCorrectionRepository($writer);
+            $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
+            $otherRepository = new \FlowBalance\Finance\Infrastructure\SqlPaymentCorrectionRepository($writer);
             foreach ([
                 static fn () => (new \FlowBalance\Finance\Application\RecordPaymentCharge($writer))->record(
                     $ana, $payment['id'], 'concurrent-charge', 'tax', '2025-11-30', '20.00',
@@ -515,7 +515,7 @@ final class AccountAccessTest extends TestCase
                     $operation();
                     self::fail('Expected the operation to wait for the payment lock');
                 } catch (PDOException $error) {
-                    self::assertSame('55P03', $error->getCode());
+                    self::assertSame(1205, $error->errorInfo[1], 'Expected a lock wait timeout');
                 } finally {
                     $writer->rollBack();
                 }
@@ -553,7 +553,7 @@ final class AccountAccessTest extends TestCase
     public function testCurrencyCorrectionsAndMonthlyNetExport(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $container = require $root . '/config/container.php';
@@ -612,7 +612,7 @@ final class AccountAccessTest extends TestCase
             self::assertSame(412, $this->write($app, $path, $mxn, $cookie, 'PATCH', 'stale', '"2"')[0]);
             $replayed = $this->write($app, '/api/payments', $capture, $cookie, key: 'usd-capture')[1];
             self::assertSame([$payment['id'], 'MXN'], [$replayed['id'], $replayed['currency']]);
-            $audit = $database->prepare("SELECT previous_values->>'exchange_rate' FROM payment_revisions WHERE payment_id = ? AND result_version = 3");
+            $audit = $database->prepare("SELECT JSON_VALUE(previous_values, '$.exchange_rate') FROM payment_revisions WHERE payment_id = ? AND result_version = 3");
             $audit->execute([$payment['id']]);
             self::assertSame('17.25', $audit->fetchColumn());
 
@@ -648,9 +648,9 @@ final class AccountAccessTest extends TestCase
 
             $insert = $database->prepare("INSERT INTO payments
                 (user_id, project_id, client_paid_amount, currency, paid_on, idempotency_key, request_fingerprint)
-                VALUES (?, ?, 100, 'USD', '2025-11-30', 'legacy-usd', repeat('c', 64)) RETURNING id::text");
+                VALUES (?, ?, 100, 'USD', '2025-11-30', 'legacy-usd', repeat('c', 64))");
             $insert->execute([$ana, $project]);
-            $legacyPath = '/api/payments/' . $insert->fetchColumn();
+            $legacyPath = '/api/payments/' . $database->lastInsertId();
             $balances = '/api/reports/project-balances';
             self::assertSame(1, $this->request($app, 'GET', $balances, $cookie)[1]['excludedUnconvertedProjectCount']);
             self::assertSame(200, $this->write($app, $legacyPath, [...$usd, 'exchangeRate' => '18'], $cookie, 'PATCH', 'resolve', '"1"')[0]);
@@ -699,7 +699,7 @@ final class AccountAccessTest extends TestCase
     public function testLoginThrottleSeparatesAuthenticatedProxyOrigins(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $oldPeers = getenv('TRUSTED_API_PROXY_PEERS');
         $oldToken = getenv('CLIENT_IP_PROXY_TOKEN');

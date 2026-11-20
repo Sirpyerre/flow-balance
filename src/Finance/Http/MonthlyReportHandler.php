@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace FlowBalance\Finance\Http;
 
-use FlowBalance\Finance\Infrastructure\PostgresMonthlyReportReader;
+use FlowBalance\Finance\Infrastructure\SqlMonthlyReportReader;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Stream;
@@ -24,7 +24,7 @@ final readonly class MonthlyReportHandler implements RequestHandlerInterface
         if (!is_string($month) || !preg_match('/\A[1-9][0-9]{3}-(0[1-9]|1[0-2])\z/', $month) || ($query['currency'] ?? '') !== 'MXN') {
             return new JsonResponse(['error' => ['code' => 'validation_failed', 'message' => 'Revisa el mes y la moneda']], 422);
         }
-        $reader = new PostgresMonthlyReportReader($request->getAttribute(PDO::class));
+        $reader = new SqlMonthlyReportReader($request->getAttribute(PDO::class));
         $report = $reader->read($request->getAttribute(SessionInterface::class)->get('userId'), $month, 'MXN');
         if (!$this->export) {
             return new JsonResponse($report);

@@ -6,7 +6,7 @@ namespace FlowBalance\Finance\Http;
 
 use DateTimeImmutable;
 use FlowBalance\Finance\Application\OwnedResourceChanges;
-use FlowBalance\Finance\Infrastructure\PostgresPaymentListReader;
+use FlowBalance\Finance\Infrastructure\SqlPaymentListReader;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Session\SessionInterface;
 use PDO;
@@ -39,7 +39,7 @@ final class PaymentListHandler implements RequestHandlerInterface
         if ($limit === false || ($cursor !== null && $position === null)) {
             return new JsonResponse(['error' => ['message' => 'No se pudo abrir esa página de cobros.']], 422);
         }
-        $reader = new PostgresPaymentListReader($request->getAttribute(PDO::class));
+        $reader = new SqlPaymentListReader($request->getAttribute(PDO::class));
         return new JsonResponse($reader->read($request->getAttribute(SessionInterface::class)->get('userId'), $limit, $position, $month));
     }
 }

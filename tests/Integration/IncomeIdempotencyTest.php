@@ -13,13 +13,14 @@ final class IncomeIdempotencyTest extends TestCase
     public function testConcurrentPaymentsRecheckTheAgreedAmount(): void
     {
         if (getenv('TEST_DB_PASSWORD') === false) {
-            self::markTestSkipped('Configure the dedicated PostgreSQL test database');
+            self::markTestSkipped('Configure the dedicated test database');
         }
         $root = dirname(__DIR__, 2);
         $database = (require $root . '/config/database.php')->connect();
-        $user = $database->prepare('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?) RETURNING id::text');
-        $user->execute(['Concurrency test', 'income-race-' . bin2hex(random_bytes(8)) . '@example.test', 'unused']);
-        $userId = $user->fetchColumn();
+        $email = 'income-race-' . bin2hex(random_bytes(8)) . '@example.test';
+        $database->prepare('INSERT INTO users (name, email, email_normalized, password_hash) VALUES (?, ?, ?, ?)')
+            ->execute(['Concurrency test', $email, $email, 'unused']);
+        $userId = $database->lastInsertId();
         $process = null;
         try {
             $clientId = (new CreateClient($database))->create($userId, 'Cliente');
@@ -32,7 +33,7 @@ final class IncomeIdempotencyTest extends TestCase
             $worker = <<<'PHP'
                 require 'vendor/autoload.php';
                 $database = (require 'config/database.php')->connect();
-                $database->exec("SET lock_timeout = '5s'");
+                $database->exec('SET SESSION innodb_lock_wait_timeout = 5');
                 $database->beginTransaction();
                 echo "ready\n";
                 try {

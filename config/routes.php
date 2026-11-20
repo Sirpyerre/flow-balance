@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FlowBalance\Finance\Infrastructure\PostgresAccountDataReader;
+use FlowBalance\Finance\Infrastructure\SqlAccountDataReader;
 use FlowBalance\Finance\Http\MonthlyReportHandler;
 use FlowBalance\Finance\Http\OwnedResourceHandler;
 use FlowBalance\Finance\Http\PaymentCorrectionHandler;
@@ -17,7 +17,7 @@ use FlowBalance\Identity\Http\LoginHandler;
 use FlowBalance\Identity\Http\LogoutHandler;
 use FlowBalance\Identity\Http\RegistrationHandler;
 use FlowBalance\Identity\Infrastructure\NativePasswordHasher;
-use FlowBalance\Identity\Infrastructure\PostgresSessionPersistence;
+use FlowBalance\Identity\Infrastructure\SqlSessionPersistence;
 use FlowBalance\Shared\Clock\SystemClock;
 use FlowBalance\Shared\Configuration\AppSettings;
 use FlowBalance\Shared\Configuration\InvalidConfiguration;
@@ -40,7 +40,7 @@ return static function (Application $app): void {
             $database = $config->connect();
             $clock = new SystemClock();
             $work = new UnitOfWork($database);
-            $session = new SessionMiddleware(new PostgresSessionPersistence($database, $clock, new SessionPolicy()));
+            $session = new SessionMiddleware(new SqlSessionPersistence($database, $clock, new SessionPolicy()));
             return $work->transaction(static fn () => $session->process(
                 $request->withAttribute(PDO::class, $database)->withAttribute(UnitOfWork::class, $work),
                 $handler,
@@ -94,7 +94,7 @@ return static function (Application $app): void {
                 'code' => 'authentication_required', 'message' => 'Inicia sesión para continuar',
             ]], 401);
         }
-        $query = $request->getAttribute(PDO::class)->prepare('SELECT id::text, name, email FROM users WHERE id = ?');
+        $query = $request->getAttribute(PDO::class)->prepare('SELECT CAST(id AS CHAR) AS id, name, email FROM users WHERE id = ?');
         $query->execute([$userId]);
         $authenticatedAt = $session->get('authenticatedAt');
         return new JsonResponse(['user' => $query->fetch(PDO::FETCH_ASSOC), 'session' => [
@@ -126,7 +126,7 @@ return static function (Application $app): void {
         static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
             $userId = $request->getAttribute(SessionInterface::class)->get('userId');
             $month = (new DateTimeImmutable('now', new DateTimeZone('America/Mexico_City')))->format('Y-m');
-            $reader = new PostgresAccountDataReader($request->getAttribute(PDO::class));
+            $reader = new SqlAccountDataReader($request->getAttribute(PDO::class));
             return new JsonResponse($reader->read($userId, $month));
         },
     ]);

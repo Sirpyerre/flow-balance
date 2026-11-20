@@ -1,0 +1,97 @@
+# Flow Balance: vhost propio, independiente del de Drupal.
+#
+# Instalación (el nombre de host se escribe una sola vez):
+#   sed 's/@FLOW_HOST@/flow.monoforms.com/g' flow-balance.conf.template | sudo tee /etc/nginx/sites-available/flow-balance.conf
+#
+# Lo que NO se repite aquí porque ya lo define monoforms.conf a nivel http y este vhost lo hereda:
+#   set_real_ip_from (rangos de Cloudflare) y real_ip_header CF-Connecting-IP, de modo que $remote_addr y
+#   REMOTE_ADDR en PHP son la IP del visitante.
+# Lo que este vhost NO hace, a propósito: no usa fastcgi_cache (la zona "drupal" es del blog) y no habilita
+#   brotli ni HTTP/3, que el Nginx del paquete de Ubuntu no trae.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name @FLOW_HOST@;
+
+    return 301 https://@FLOW_HOST@$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name @FLOW_HOST@;
+
+    # Certificado de origen comodín de Cloudflare (*.monoforms.com), el mismo que usa el blog.
+    ssl_certificate     /etc/nginx/ssl/cloudflare-origin.pem;
+    ssl_certificate_key /etc/nginx/ssl/cloudflare-origin.key;
+
+    access_log /var/log/nginx/flow-balance.access.log;
+    error_log  /var/log/nginx/flow-balance.error.log;
+
+    # El frontend compilado. Todo lo que no es /api es un archivo estático.
+    root /var/www/flowbalance/current/frontend/dist;
+    index index.html;
+
+    client_max_body_size 1m;
+
+    gzip on;
+    gzip_vary on;
+    gzip_types text/css application/javascript application/json application/manifest+json image/svg+xml;
+
+    include /etc/nginx/snippets/flow-balance-security.conf;
+
+    # Archivos ocultos y cualquier .php: nunca se sirven. Van antes que las demás expresiones regulares.
+    location ~ /\. { return 404; }
+    location ~ \.php$ { return 404; }
+
+    # La API: único punto de entrada PHP. $realpath_root resuelve el enlace "current" a la ruta real del release,
+    # de modo que OPcache y la caché de rutas de PHP ven archivos distintos al activar otro release y no hace falta
+    # recargar PHP-FPM (que comparte proceso maestro con el blog).
+    location ^~ /api/ {
+        root /var/www/flowbalance/current/public;
+
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/flowbalance.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_read_timeout 30s;
+
+        # Una sola cabecera de caché, la de la política privada, también en los errores que genera Nginx.
+        fastcgi_hide_header Cache-Control;
+        fastcgi_hide_header X-Powered-By;
+        add_header Cache-Control "private, no-store" always;
+        include /etc/nginx/snippets/flow-balance-security.conf;
+    }
+
+    # Vistas autenticadas: nunca en caché compartida ni en disco. Es la política que en desarrollo aplica el plugin
+    # de Vite (frontend/astro.config.mjs) y que el sitio compilado no trae.
+    location ~ ^/(dashboard|clients|projects|payments)(/|$) {
+        add_header Cache-Control "private, no-store" always;
+        include /etc/nginx/snippets/flow-balance-security.conf;
+        try_files $uri $uri/index.html =404;
+    }
+
+    # El service worker se revalida siempre para que una versión nueva se propague.
+    location = /service-worker.js {
+        add_header Cache-Control "no-cache" always;
+        include /etc/nginx/snippets/flow-balance-security.conf;
+    }
+
+    # Activos con hash en el nombre: inmutables. Sin "always" a propósito: así la cabecera solo se envía en las
+    # respuestas exitosas y un 404 no queda guardado un año.
+    location ^~ /_astro/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        include /etc/nginx/snippets/flow-balance-security.conf;
+        try_files $uri =404;
+    }
+
+    # El resto (inicio, ingreso, registro, manifiesto, iconos): se revalida siempre. Una página HTML guardada que
+    # apuntara a activos de un release ya eliminado se vería rota.
+    location / {
+        add_header Cache-Control "no-cache" always;
+        include /etc/nginx/snippets/flow-balance-security.conf;
+        try_files $uri $uri/index.html =404;
+    }
+}

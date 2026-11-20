@@ -251,7 +251,10 @@ if [ -n "$mbin" ] && priv "$mbin" -NBe 'SELECT 1' >/dev/null; then
   printf '  tablas de zonas horarias cargadas: %s nombres\n' "$(q 'SELECT COUNT(*) FROM mysql.time_zone_name')"
   printf '  log_bin=%s log_bin_trust_function_creators=%s\n' "$(q 'SELECT @@log_bin')" "$(q 'SELECT @@log_bin_trust_function_creators')"
   if [ "$(q "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${APP_DB}'")" = "1" ]; then ok "Base ${APP_DB} ya existe"; else pend "Base ${APP_DB} (se crea con el aprovisionamiento manual)"; fi
-  if [ "$(q "SELECT COUNT(*) FROM mysql.user WHERE User='${APP_DB_USER}'")" -ge 1 ] 2>/dev/null; then ok "Usuario ${APP_DB_USER} ya existe"; else pend "Usuario ${APP_DB_USER}@localhost"; fi
+  hosts=$(q "SELECT COUNT(*) FROM mysql.user WHERE User='${APP_DB_USER}' AND Host IN ('localhost','127.0.0.1')")
+  if [ "${hosts:-0}" -ge 2 ] 2>/dev/null; then ok "Usuario ${APP_DB_USER} existe para localhost y 127.0.0.1";
+  elif [ "${hosts:-0}" -eq 1 ] 2>/dev/null; then warn "Usuario ${APP_DB_USER} solo existe para uno de los anfitriones: cree también el otro (localhost y 127.0.0.1)";
+  else pend "Usuario ${APP_DB_USER}@localhost y @127.0.0.1"; fi
 else
   skip "Consultas a MariaDB requieren acceso administrador. Ejecute con un usuario con sudo: sudo mariadb -e \"SELECT VERSION(), @@max_connections;\""
 fi
@@ -277,6 +280,30 @@ fi
 have rsync && ok "rsync disponible (lo usa el pipeline)" || fail "rsync no instalado (el pipeline lo necesita en el servidor)"
 have gzip && ok "gzip disponible" || warn "gzip no encontrado (respaldos)"
 have mariadb-dump || have mysqldump && ok "mariadb-dump/mysqldump disponible (respaldos)" || fail "Falta mariadb-dump o mysqldump"
+
+head1 "Piezas de despliegue (deploy/)"
+[ -e /etc/nginx/snippets/flow-balance-security.conf ] && ok "Snippet de seguridad de Nginx instalado" || pend "/etc/nginx/snippets/flow-balance-security.conf"
+[ -e /etc/nginx/sites-enabled/flow-balance.conf ] && ok "vhost flow-balance.conf habilitado" || pend "vhost /etc/nginx/sites-enabled/flow-balance.conf"
+[ -S /run/php/flowbalance.sock ] && ok "Socket del pool flowbalance activo" || pend "Socket /run/php/flowbalance.sock (aparece al recargar PHP-FPM con el pool instalado)"
+if [ -L "${APP_DIR}/current" ]; then ok "Release activo: $(readlink "${APP_DIR}/current")"; else pend "Enlace ${APP_DIR}/current (lo crea el primer despliegue)"; fi
+if [ -d "${APP_DIR}/shared" ]; then
+  mode=$(stat -c '%a' "${APP_DIR}/shared" 2>/dev/null)
+  case "$mode" in 750|700) ok "shared/ con modo ${mode}: Nginx no llega a los secretos" ;; *) fail "shared/ con modo '${mode}' (debe ser 750 para que www-data no lea los secretos)" ;; esac
+  [ -d "${APP_DIR}/shared/backups" ] && ok "shared/backups existe" || pend "${APP_DIR}/shared/backups"
+fi
+# La plantilla del vhost asume la llave del certificado de origen en esta ruta; aquí se comprueba contra la real.
+EXPECTED_KEY="/etc/nginx/ssl/cloudflare-origin.key"
+if [ -n "${dump:-}" ]; then
+  keys=$(printf '%s\n' "$dump" | grep -E '^[[:space:]]*ssl_certificate_key[[:space:]]' | awk '{print $2}' | tr -d ';' | grep -v snakeoil | sort -u)
+  if [ -z "$keys" ]; then warn "No se detectó ssl_certificate_key; revise la llave que usa el vhost del blog"
+  else
+    for k in $keys; do
+      if [ "$k" = "$EXPECTED_KEY" ]; then ok "La llave del certificado es la que asume deploy/nginx (${k})"
+      else warn "La llave del certificado del blog es ${k}, no ${EXPECTED_KEY}: corrija ssl_certificate_key en deploy/nginx/flow-balance.conf.template"; fi
+      priv test -e "$k" && ok "La llave ${k} existe" || skip "No se pudo comprobar que ${k} exista (requiere privilegios)"
+    done
+  fi
+fi
 
 head1 "Seguridad básica"
 if have ufw; then

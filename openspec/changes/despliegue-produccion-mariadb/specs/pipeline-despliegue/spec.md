@@ -72,6 +72,10 @@ activarse.
 - **WHEN** una migración termina con error
 - **THEN** el release anterior sigue activo, el respaldo existe y el pipeline reporta el fallo
 
+#### Scenario: Respaldo vacío o incompleto
+- **WHEN** el respaldo termina con error, queda vacío o no acaba con la marca de volcado completo
+- **THEN** no se aplica ninguna migración, el release no se activa y el pipeline reporta el fallo
+
 ### Requirement: Comprobación y reversión
 Tras activar, el despliegue MUST consultar el punto de salud desde el propio servidor, sin pasar
 por el proxy público, y, si no responde de forma correcta, MUST restaurar el enlace al release

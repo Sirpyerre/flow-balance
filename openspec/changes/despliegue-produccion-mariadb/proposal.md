@@ -53,6 +53,9 @@ elegir el subdominio (queda como variable `APP_ORIGIN`).
 - `pipeline-despliegue`: construcción, lista blanca de archivos, releases atómicos, respaldo,
   migración y rollback desde GitHub Actions.
 - `verificacion-servidor`: comprobación de solo lectura de los requisitos técnicos del VPS.
+- `aprovisionamiento-servidor`: playbook propio, acotado e idempotente que no toca el blog, secretos
+  generados en el servidor, usuario único `flowdeploy`, y respaldo local verificado por flujo sin
+  copia en el servidor.
 
 ### Modified Capabilities
 
@@ -64,8 +67,8 @@ cambian de comportamiento.
 - Código: `src/**` (unas 40 de 45 clases tocan SQL específico de PostgreSQL), `config/`,
   `phinx.php`, `db/migrations/**`, `composer.json`, `composer.lock`, `compose.yaml`,
   `.env.example`, `tests/**`.
-- Archivos nuevos: `deploy/` (Nginx, FPM, scripts), `.github/workflows/`, script de verificación
-  en este cambio.
+- Archivos nuevos: `deploy/` (Nginx, FPM, scripts, playbook de Ansible, respaldo y restauración
+  locales), `.github/workflows/`, script de verificación en este cambio.
 - Sistemas: base `flow_balance` y usuario nuevos en la MariaDB del VPS, un pool FPM y un vhost
   nuevos, un usuario de despliegue. El blog Drupal no debe verse afectado: RAM, conexiones
   (`max_connections = 25` compartido) y la caché FastCGI `drupal` son los puntos de contacto.

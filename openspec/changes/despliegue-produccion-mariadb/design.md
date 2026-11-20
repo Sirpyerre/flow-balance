@@ -206,12 +206,19 @@ El `.env` compartido se enlaza dentro del release, donde Dotenv lo busca.
 
 ### D14. Un usuario de sistema, un usuario de base
 
-El usuario `flowbalance` ejecuta el pool y recibe los despliegues; es distinto de `www-data` del
-blog, por lo que no puede leer los archivos de Drupal. En MariaDB un único usuario
-`flow_balance_app@localhost` con todos los privilegios solo sobre `flow_balance.*`.
-*Alternativa descartada:* separar usuario de migraciones y de ejecución; es mínimo privilegio
-real, pero duplica secretos y configuración en un servidor de una sola persona. Se reevaluará si
-se agregan operadores.
+El usuario `flowdeploy` ejecuta el pool, es dueño del código y recibe los despliegues; es distinto
+de `www-data` del blog, por lo que no puede leer los archivos de Drupal. Tiene shell (el pipeline
+y el respaldo local entran por SSH y ejecutan comandos, algo que `nologin` impide), sin sudo y sin
+contraseña. El pool se sigue llamando `flowbalance` (el socket no cambia); solo cambia el usuario
+que lo ejecuta. En MariaDB un único usuario `flow_balance_app` (para `localhost` y `127.0.0.1`)
+con todos los privilegios solo sobre `flow_balance.*`.
+*Riesgo aceptado:* si PHP se compromete, el atacante puede reescribir el código del release y leer
+`shared/.env`. Lo acotan `open_basedir`, `disable_functions`, el pool de 2 procesos y que el
+usuario no es el del blog; el impacto máximo es código y datos de Flow Balance.
+*Alternativas descartadas:* (a) usuario de despliegue separado del que ejecuta PHP: impide que un
+PHP comprometido modifique el código, pero añade permisos de grupo en `releases/` y `.env` para un
+servidor de una sola persona; (b) separar usuario de migraciones y de ejecución en MariaDB:
+mínimo privilegio real, pero duplica secretos. Ambas se reevaluarán si se agregan operadores.
 
 ### D15. Secretos
 
@@ -345,6 +352,80 @@ más pueda apuntar ahí por error.
 *Alternativa descartada:* ejecutarla en `flow_balance_test` y limpiar las tablas al terminar; las
 migraciones usan nombres fijos (`users`, `payments`...) y chocarían con las demás pruebas si corren juntas.
 
+### D26. Política de caché del vhost, ensayada
+
+El vhost se ensayó en un contenedor igual al VPS (Ubuntu 24.04, `nginx` 1.24 y `php8.3-fpm` de Ubuntu, el mismo
+`disable_functions`, y OPcache con `validate_timestamps=1`, revalidación de 60 s y `realpath_cache_ttl=600`).
+De ahí salieron cuatro reglas:
+
+- Los activos con hash llevan `immutable` **solo en respuestas exitosas** (`add_header` sin `always`); con `always`,
+  un 404 de un activo inexistente quedaba guardado un año.
+- El HTML público (inicio, ingreso, registro) lleva `no-cache`: una página guardada que apunte a activos de un
+  release ya eliminado se vería rota.
+- `/api/` oculta el `Cache-Control` de PHP y pone el suyo (`private, no-store`) con `always`: una sola cabecera,
+  también en los errores que genera Nginx (un 502 con PHP caído sigue siendo privado).
+- `add_header` no se hereda en un bloque que define el suyo, así que las tres cabeceras de seguridad viven en un
+  fragmento que cada `location` incluye.
+
+También quedó comprobado por contraste que `$realpath_root` es necesario: con la ruta del enlace sin resolver, tras
+cambiar de release siguió activo el código anterior; con él, el release nuevo y la reversión se sirven al instante
+sin recargar PHP-FPM.
+
+### D27. Un respaldo se verifica antes de confiar en él
+
+En el ensayo de respaldo, un `mariadb-dump` que no llegó a ejecutarse produjo un archivo de 20 bytes y la restauración
+terminó «sin errores». Un respaldo vacío no falla: es un falso verde. `release.sh` MUST usar `pipefail` y comprobar que
+el volcado termina con `-- Dump completed` antes de migrar; si no, aborta sin tocar la base. El usuario de la base se
+crea para `localhost` y para `127.0.0.1`, porque MariaDB los trata como anfitriones distintos si resuelve nombres de
+forma estricta.
+
+### D28. Aprovisionamiento con un playbook propio, acotado e idempotente
+
+El Ansible de monoforms reconstruye el servidor completo (`apt upgrade dist` con reinicio, reescribe
+`nginx.conf`, `sshd_config`, UFW y la clave de root de MariaDB, y reinicia Nginx, PHP-FPM y MariaDB
+al final), así que ejecutarlo de nuevo afectaría al blog. Flow Balance lleva su propio playbook en
+`deploy/ansible/` (no forma parte del paquete desplegado, que es de lista blanca) que se ejecuta
+desde la Mac del operador, no desde CI. Cubre solo lo que es de Flow: preflight de solo lectura
+(PHP 8.3-FPM y Nginx instalados, MariaDB activo y accesible como administrador, existen
+`cloudflare-origin.pem` y `.key`, `flow_host` definido y distinto del marcador), usuario y directorios,
+base y usuarios de MariaDB, `shared/.env`, pool, vhost y `/usr/local/bin/flowbalance-dump` (D29).
+No toca `nginx.conf`, `php.ini`, el pool `www`, `sshd`, UFW, fail2ban ni la base `drupal`, y no hace
+`apt upgrade` ni reinicios: valida con `nginx -t` y `php-fpm8.3 -t` y solo recarga; si la validación
+falla retira el enlace del vhost o el archivo del pool y aborta, para que el blog siga sirviendo.
+Una segunda ejecución MUST dar `changed=0` y funcionar con `--check`.
+La fuente de verdad de vhost, pool y `.env` de ejemplo son los archivos de `deploy/` ya ensayados; el
+playbook los lee y sustituye `@FLOW_HOST@`, sin copias.
+Los secretos nunca pasan por la Mac ni por GitHub (no hace falta Ansible Vault): si `shared/.env` no
+existe, el servidor genera `APP_SECRET` y `DB_PASSWORD` con `openssl` y escribe el archivo en modo
+600; si existe, se lee `DB_PASSWORD` con `no_log` solo para comprobar que el usuario de MariaDB
+exista, y nunca se rota ni se sobrescribe. La salida no imprime valores.
+*Alternativas descartadas:* (a) un rol dentro del repo de monoforms: dos fuentes de verdad para el
+vhost y mezcla de proyectos; (b) mantener solo el README manual: no sobrevive a reconstruir el droplet
+con Terraform y Ansible, que devolverían el blog y no Flow.
+
+### D29. Respaldo local por flujo, sin copia en el servidor
+
+El respaldo periódico lo ejecuta el operador a mano desde su Mac con `deploy/backup-local.sh`: abre
+SSH como `flowdeploy`, ejecuta `/usr/local/bin/flowbalance-dump` y recibe el volcado comprimido por
+la misma conexión directamente en disco local. El servidor no escribe ninguna copia, así que no hay
+nada que borrar, no se llena su disco y no hay riesgo de borrar un respaldo que no se verificó. Las
+verificaciones se hacen en local sobre el archivo recibido: `gzip -t`, la última línea es
+`-- Dump completed`, tamaño mínimo y al menos 10 `CREATE TABLE`. Si falla alguna, se borra el archivo
+parcial y el script sale con error. Avisa cuando el último respaldo local tenga más de 7 días. El
+destino por defecto está fuera del repositorio (`~/Backups/flow-balance`).
+`flowbalance-dump` es la única definición del volcado (`mariadb-dump --single-transaction --quick
+--default-character-set=utf8mb4` con `pipefail`, `.env` leído sin ejecutarlo, contraseña solo en el
+entorno del proceso); lo usan este script y `release.sh` (9.3). Los respaldos previos a cada migración
+siguen en `shared/backups` (los 7 más recientes) porque el pipeline los necesita para revertir.
+`deploy/restore-local.sh` restaura el último respaldo en una base desechable de la MariaDB local y
+compara las tablas: un respaldo que nunca se restauró es una suposición.
+*Riesgo aceptado:* sin cron, el respaldo depende de que el operador lo ejecute; un fallo del servidor
+entre dos ejecuciones pierde los cobros de ese intervalo. Además, `innodb_flush_log_at_trx_commit = 2`
+y `skip-log-bin` (configuración de monoforms, global y no aislable por base) permiten perder hasta ~1
+s de transacciones confirmadas ante una caída del sistema; se documenta y no se cambia.
+*Alternativas descartadas:* crear el archivo en el servidor, copiarlo y borrarlo (exige comparar
+`sha256` en ambos lados y ofrece lo mismo); cron en el servidor (el usuario prefirió el control manual).
+
 ## Risks / Trade-offs
 
 - [Un cálculo monetario cambia de resultado] → D11 (referencia byte a byte), pruebas de frontera
@@ -370,6 +451,16 @@ migraciones usan nombres fijos (`users`, `payments`...) y chocarían con las dem
 - [El vhost de Flow depende de `real_ip` definido en el archivo del blog] → si alguien lo quita,
   el limitador de login vería IPs de Cloudflare y bloquearía a visitantes distintos a la vez. Se
   mitiga con la prueba de la tarea 7.5 y con la comprobación de `verificar-servidor.sh`.
+- [Volver a ejecutar el Ansible de monoforms revierte o pisa lo de Flow] → no toca los archivos de
+  Flow (el vhost y el pool no están en sus plantillas), pero reescribe `sshd_config` y reinicia
+  servicios: se ejecuta con etiquetas y se vuelve a correr `verificar-servidor.sh` después.
+- [`sshd_config.d/` se ignora en el servidor] → la plantilla de monoforms reemplaza `sshd_config` sin
+  `Include`, por lo que el endurecimiento de la tarea 8.3 se escribe en `/etc/ssh/sshd_config` y se
+  replica en esa plantilla para que sobreviva.
+- [Desactivar root rompe el Ansible y los scripts de monoforms] → entran como `root`
+  (`remote_user = root`); se ajusta su inventario antes de cerrar root.
+- [El presupuesto de memoria de monoforms ya llega a ~946 MB en el pico] → el pool de Flow añade
+  hasta 2 procesos; OPcache es compartido. La medición de la tarea 10.3 decide.
 - [El origen acepta conexiones directas en 80 y 443 sin pasar por Cloudflare] → no se restringe
   porque afectaría al blog y queda fuera de alcance; `real_ip` ignora encabezados falsificados, y
   la app no depende de que el tráfico llegue por Cloudflare.

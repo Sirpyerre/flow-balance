@@ -10,10 +10,10 @@ import PageHeader from './PageHeader.astro';
   </PageHeader>
   <StateMessage kind="loading" id="status"><span>Verificando tu sesión…</span></StateMessage>
   <button class="button" type="button" hidden>Reintentar</button>
-  <ul class="card page-card record-list" role="list" hidden></ul>
+  <ul class="card page-card record-list collection-list" role="list" hidden></ul>
 </section>
 <script>
-  import { incomeRequest, resourceQuery, type Client } from '../lib/income-api';
+  import { createdLabel, incomeRequest, resourceQuery, type Client } from '../lib/income-api';
   import { watchPrivateSession } from '../lib/private-session';
 
   const panel = document.querySelector<HTMLElement>('[data-collection]')!;
@@ -50,6 +50,8 @@ import PageHeader from './PageHeader.astro';
       const data = await incomeRequest<{ clients: Client[]; projects: (Client & { clientId: string })[] }>('/api/dashboard', { signal: current.signal, passive: true });
       if (current.signal.aborted) return;
       const clients = new Map(data.clients.map(client => [client.id, client.name]));
+      const projectCounts = new Map<string, number>();
+      for (const project of data.projects) projectCounts.set(project.clientId, (projectCounts.get(project.clientId) ?? 0) + 1);
       const rows = data[collection].slice().sort((first, second) => collator.compare(first.name, second.name));
       count.textContent = `${rows.length} ${noun[rows.length === 1 ? 0 : 1]}`;
       if (rows.length) setState('empty', '');
@@ -60,10 +62,18 @@ import PageHeader from './PageHeader.astro';
         link.href = `/${collection}/view?${resourceQuery('id', row.id)}`;
         link.textContent = row.name;
         item.append(link);
-        if ('clientId' in row) {
-          const client = document.createElement('span');
-          client.textContent = clients.get(row.clientId) ?? '';
-          item.append(client);
+        const detail = document.createElement('span');
+        if ('clientId' in row) detail.textContent = clients.get(row.clientId) ?? '';
+        else {
+          const projects = projectCounts.get(row.id) ?? 0;
+          detail.textContent = projects === 0 ? 'Sin proyectos' : `${projects} ${projects === 1 ? 'proyecto' : 'proyectos'}`;
+        }
+        item.append(detail);
+        if (row.createdOn) {
+          const created = document.createElement('time');
+          created.dateTime = row.createdOn;
+          created.textContent = createdLabel(row.createdOn);
+          item.append(created);
         }
         list.append(item);
       }

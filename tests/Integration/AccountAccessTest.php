@@ -330,6 +330,9 @@ final class AccountAccessTest extends TestCase
             self::assertSame(1, $dashboard['activeClientCount']);
             self::assertSame(4, $dashboard['projectCount']);
             self::assertSame(5, $dashboard['paymentCount']);
+            foreach ([...$dashboard['clients'], ...$dashboard['projects']] as $record) {
+                self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}$/', $record['createdOn']);
+            }
             [$listStatus, $list, , $listHeaders] = $this->request($app, 'GET', '/api/payments?limit=2', $cookie);
             self::assertSame(200, $listStatus);
             self::assertStringContainsString('no-store', $listHeaders);

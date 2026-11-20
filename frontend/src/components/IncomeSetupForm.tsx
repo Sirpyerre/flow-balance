@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import FieldError from './FieldError';
 import { fieldErrorsOf, focusFirstInvalid, invalidProps, type FieldErrors } from '../lib/form-errors';
-import { IncomeError, amountLabel, collectionStatusLabel, incomeRequest, resourceQuery, type Client, type Project } from '../lib/income-api';
+import { IncomeError, amountLabel, collectionStatusLabel, createdLabel, incomeRequest, resourceQuery, type Client, type Project } from '../lib/income-api';
 import { estimatedPayment } from '../lib/project-agreement';
 import DiscardChangesDialog from './DiscardChangesDialog';
 
@@ -141,7 +141,7 @@ export default function IncomeSetupForm({ mode, clients, selected, fromProject, 
       </form>
       <aside className="card page-card side-panel">
         {isClient ? <><h2>Clientes registrados</h2>
-          {choices.length ? <ul className="record-list">{choices.map(client => <li key={client.id}><a href={`/clients/view?${resourceQuery('id', client.id)}`}>{client.name}</a></li>)}</ul> : <p>Aún no tienes clientes.</p>}</>
+          {choices.length ? <ul className="record-list collection-list">{choices.map(client => <li key={client.id}><a href={`/clients/view?${resourceQuery('id', client.id)}`}>{client.name}</a>{client.createdOn && <time dateTime={client.createdOn}>{createdLabel(client.createdOn)}</time>}</li>)}</ul> : <p>Aún no tienes clientes.</p>}</>
           : project ? <><h2>Estado del proyecto</h2>
             <p>{collectionStatusLabel[project.collectionStatus]}</p>
             <progress aria-label="Avance de cobro" max={100} value={paidPercentage} />

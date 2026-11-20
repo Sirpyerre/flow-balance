@@ -58,6 +58,10 @@
 .record-list li:first-child { border-top: 1px solid var(--border); }
 .record-list span { color: var(--label); font-size: .875rem; }
 .record-list a { justify-self: start; text-underline-offset: 3px; }
+.collection-list li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 1rem; row-gap: .125rem; }
+.collection-list li > :not(time) { grid-column: 1; }
+.collection-list time { grid-column: 2; grid-row: 1 / span 2; color: var(--muted); font-size: .8125rem; text-align: end; white-space: nowrap; }
+.page-workspace .collection-list.page-card { width: 100%; max-width: none; margin-inline: 0; }
 .record-list strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .charge-form { margin-top: 1rem; padding: 0 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--base); }
 .charge-form summary { padding: .875rem 0; font-weight: 600; }

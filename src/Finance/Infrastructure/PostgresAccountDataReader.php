@@ -13,8 +13,8 @@ final readonly class PostgresAccountDataReader
 
     public function read(string $userId, string $month): array
     {
-        $clients = $this->rows('SELECT id::text, name FROM clients WHERE user_id = ? ORDER BY id', [$userId]);
-        $projects = $this->rows('SELECT id::text, name, client_id::text AS "clientId" FROM projects WHERE user_id = ? ORDER BY id', [$userId]);
+        $clients = $this->rows('SELECT id::text, name, to_char(created_at AT TIME ZONE \'America/Mexico_City\', \'YYYY-MM-DD\') AS "createdOn" FROM clients WHERE user_id = ? ORDER BY id', [$userId]);
+        $projects = $this->rows('SELECT id::text, name, client_id::text AS "clientId", to_char(created_at AT TIME ZONE \'America/Mexico_City\', \'YYYY-MM-DD\') AS "createdOn" FROM projects WHERE user_id = ? ORDER BY id', [$userId]);
         $payments = $this->rows('SELECT id::text, project_id::text AS "projectId",
             trim_scale(client_paid_amount)::text AS "clientPaidAmount", currency, paid_on AS "paidOn"
             FROM payments WHERE user_id = ? AND deleted_at IS NULL ORDER BY id', [$userId]);

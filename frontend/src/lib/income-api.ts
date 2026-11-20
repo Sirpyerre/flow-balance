@@ -36,7 +36,10 @@ export async function incomeRequest<T>(
 export const amountLabel = (amount: string, currency = 'MXN') => `${currency} ${amount}`;
 export const resourceQuery = (key: string, id: string) => new URLSearchParams({ [key]: id }).toString();
 
-export type Client = { id: string; name: string };
+export type Client = { id: string; name: string; createdOn?: string };
+
+const createdFormat = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+export const createdLabel = (createdOn: string) => `Creado el ${createdFormat.format(new Date(`${createdOn}T00:00:00Z`))}`;
 export type PaymentCurrency = 'MXN' | 'USD';
 export type PaymentEquivalents = { clientPaidAmount: string; platformFee: string; withheldTaxAmount: string; receivedAmount: string };
 export type PaymentSummary = {

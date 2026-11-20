@@ -23,6 +23,7 @@ use FlowBalance\Shared\Configuration\AppSettings;
 use FlowBalance\Shared\Configuration\InvalidConfiguration;
 use FlowBalance\Shared\Database\UnitOfWork;
 use FlowBalance\Shared\Http\ClientIpResolver;
+use FlowBalance\Shared\Http\HealthCheck;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Application;
 use Mezzio\Csrf\SessionCsrfGuard;
@@ -57,6 +58,9 @@ return static function (Application $app): void {
             ]], 503);
         }
     };
+
+    // Outside $transaction on purpose: no session, no transaction, nothing written (design D16).
+    $app->get('/api/health', new HealthCheck($settings, static fn (): PDO => (require __DIR__ . '/database.php')->connect()));
 
     $app->get('/api/auth/csrf', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
         $guard = new SessionCsrfGuard($request->getAttribute(SessionInterface::class));

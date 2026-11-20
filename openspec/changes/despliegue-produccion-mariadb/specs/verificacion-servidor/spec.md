@@ -19,7 +19,8 @@ El script MUST reportar, con un resultado de cumple, advertencia o falla por cad
 operativo, PHP y su versión mínima (8.3), extensiones `pdo_mysql`, `mbstring`, `intl` y
 `bcmath`, estado del servicio PHP-FPM, versión de Nginx y validez de su configuración, versión
 y escucha de MariaDB, memoria y swap disponibles, espacio en disco, `disable_functions`,
-`max_connections` frente al uso actual, y la presencia de caché FastCGI a nivel global.
+`max_connections` frente al uso actual, la presencia de caché FastCGI a nivel global, la configuración de `real_ip_header` y un
+certificado cuyo nombre cubra el host de la aplicación.
 
 #### Scenario: Servidor conforme
 - **WHEN** el servidor cumple todos los requisitos

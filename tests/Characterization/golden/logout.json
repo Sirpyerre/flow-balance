@@ -1,0 +1,41 @@
+[
+    {
+        "step": "logout without a CSRF token",
+        "status": 403,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "invalid_csrf",
+                "message": "No se pudo verificar la solicitud"
+            }
+        }
+    },
+    {
+        "step": "logout",
+        "status": 204,
+        "cacheControl": "no-store, private",
+        "body": null
+    },
+    {
+        "step": "session after logout",
+        "status": 401,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "authentication_required",
+                "message": "Inicia sesión para continuar"
+            }
+        }
+    },
+    {
+        "step": "dashboard after logout",
+        "status": 401,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "authentication_required",
+                "message": "Inicia sesión para continuar"
+            }
+        }
+    }
+]

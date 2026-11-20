@@ -1,0 +1,579 @@
+[
+    {
+        "step": "payment list",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "summary": {
+                "paymentCount": 4,
+                "latestPaidOn": "2025-12-01",
+                "totalsByCurrency": {
+                    "MXN": "5600.00",
+                    "USD": "100.00"
+                }
+            },
+            "recentMonths": [
+                "2025-12",
+                "2025-11"
+            ],
+            "payments": [
+                {
+                    "id": "<id:9>",
+                    "paidOn": "2025-12-01",
+                    "currency": "USD",
+                    "clientPaidAmount": "100.00"
+                },
+                {
+                    "id": "<id:8>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "500.00"
+                },
+                {
+                    "id": "<id:7>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "300.00"
+                },
+                {
+                    "id": "<id:6>",
+                    "paidOn": "2025-11-30",
+                    "currency": "MXN",
+                    "clientPaidAmount": "4800.00"
+                }
+            ],
+            "nextCursor": null
+        }
+    },
+    {
+        "step": "payment list, first page of two",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "summary": {
+                "paymentCount": 4,
+                "latestPaidOn": "2025-12-01",
+                "totalsByCurrency": {
+                    "MXN": "5600.00",
+                    "USD": "100.00"
+                }
+            },
+            "recentMonths": [
+                "2025-12",
+                "2025-11"
+            ],
+            "payments": [
+                {
+                    "id": "<id:9>",
+                    "paidOn": "2025-12-01",
+                    "currency": "USD",
+                    "clientPaidAmount": "100.00"
+                },
+                {
+                    "id": "<id:8>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "500.00"
+                }
+            ],
+            "nextCursor": "2025-12-01~<id:8>"
+        }
+    },
+    {
+        "step": "payment list, second page",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "summary": {
+                "paymentCount": 4,
+                "latestPaidOn": "2025-12-01",
+                "totalsByCurrency": {
+                    "MXN": "5600.00",
+                    "USD": "100.00"
+                }
+            },
+            "recentMonths": [
+                "2025-12",
+                "2025-11"
+            ],
+            "payments": [
+                {
+                    "id": "<id:7>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "300.00"
+                },
+                {
+                    "id": "<id:6>",
+                    "paidOn": "2025-11-30",
+                    "currency": "MXN",
+                    "clientPaidAmount": "4800.00"
+                }
+            ],
+            "nextCursor": null
+        }
+    },
+    {
+        "step": "payment list filtered by month",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "summary": {
+                "paymentCount": 3,
+                "latestPaidOn": "2025-12-01",
+                "totalsByCurrency": {
+                    "MXN": "800.00",
+                    "USD": "100.00"
+                }
+            },
+            "recentMonths": [
+                "2025-12",
+                "2025-11"
+            ],
+            "payments": [
+                {
+                    "id": "<id:9>",
+                    "paidOn": "2025-12-01",
+                    "currency": "USD",
+                    "clientPaidAmount": "100.00"
+                },
+                {
+                    "id": "<id:8>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "500.00"
+                },
+                {
+                    "id": "<id:7>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "300.00"
+                }
+            ],
+            "nextCursor": null
+        }
+    },
+    {
+        "step": "monthly report 2025-11",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "month": "2025-11",
+            "currency": "MXN",
+            "clientPaidTotal": "4800.00",
+            "platformFeeTotal": "150.25",
+            "taxTotal": "49.75",
+            "netReceivedTotal": "4600.00",
+            "unconvertedPaymentCount": 0,
+            "payments": [
+                {
+                    "id": "<id:6>",
+                    "paidOn": "2025-11-30",
+                    "currency": "MXN",
+                    "clientPaidAmount": "4800.00"
+                }
+            ],
+            "movements": [
+                {
+                    "paymentId": "<id:6>",
+                    "movementId": "<id:6>",
+                    "paidOn": "2025-11-30",
+                    "kind": "payment",
+                    "currency": "MXN",
+                    "exchangeRate": null,
+                    "originalPaidAmount": "4800.00",
+                    "originalPlatformFee": "150.25",
+                    "originalTaxAmount": "49.75",
+                    "clientPaidAmount": "4800.00",
+                    "platformFee": "150.25",
+                    "taxAmount": "49.75",
+                    "netAmount": "4600.00"
+                }
+            ]
+        }
+    },
+    {
+        "step": "monthly report 2025-12",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "month": "2025-12",
+            "currency": "MXN",
+            "clientPaidTotal": "2525.00",
+            "platformFeeTotal": "136.25",
+            "taxTotal": "101.75",
+            "netReceivedTotal": "2287.00",
+            "unconvertedPaymentCount": 0,
+            "payments": [
+                {
+                    "id": "<id:7>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "300.00"
+                },
+                {
+                    "id": "<id:8>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "500.00"
+                },
+                {
+                    "id": "<id:9>",
+                    "paidOn": "2025-12-01",
+                    "currency": "MXN",
+                    "clientPaidAmount": "1725.00"
+                }
+            ],
+            "movements": [
+                {
+                    "paymentId": "<id:6>",
+                    "movementId": "<id:11>",
+                    "paidOn": "2025-12-03",
+                    "kind": "tax",
+                    "currency": "MXN",
+                    "exchangeRate": null,
+                    "originalPaidAmount": "0.00",
+                    "originalPlatformFee": "0.00",
+                    "originalTaxAmount": "50.00",
+                    "clientPaidAmount": "0.00",
+                    "platformFee": "0.00",
+                    "taxAmount": "50.00",
+                    "netAmount": "-50.00"
+                },
+                {
+                    "paymentId": "<id:6>",
+                    "movementId": "<id:10>",
+                    "paidOn": "2025-12-02",
+                    "kind": "commission",
+                    "currency": "MXN",
+                    "exchangeRate": null,
+                    "originalPaidAmount": "0.00",
+                    "originalPlatformFee": "50.00",
+                    "originalTaxAmount": "0.00",
+                    "clientPaidAmount": "0.00",
+                    "platformFee": "50.00",
+                    "taxAmount": "0.00",
+                    "netAmount": "-50.00"
+                },
+                {
+                    "paymentId": "<id:9>",
+                    "movementId": "<id:9>",
+                    "paidOn": "2025-12-01",
+                    "kind": "payment",
+                    "currency": "USD",
+                    "exchangeRate": "17.25",
+                    "originalPaidAmount": "100.00",
+                    "originalPlatformFee": "5.00",
+                    "originalTaxAmount": "3.00",
+                    "clientPaidAmount": "1725.00",
+                    "platformFee": "86.25",
+                    "taxAmount": "51.75",
+                    "netAmount": "1587.00"
+                },
+                {
+                    "paymentId": "<id:8>",
+                    "movementId": "<id:8>",
+                    "paidOn": "2025-12-01",
+                    "kind": "payment",
+                    "currency": "MXN",
+                    "exchangeRate": null,
+                    "originalPaidAmount": "500.00",
+                    "originalPlatformFee": "0.00",
+                    "originalTaxAmount": "0.00",
+                    "clientPaidAmount": "500.00",
+                    "platformFee": "0.00",
+                    "taxAmount": "0.00",
+                    "netAmount": "500.00"
+                },
+                {
+                    "paymentId": "<id:7>",
+                    "movementId": "<id:7>",
+                    "paidOn": "2025-12-01",
+                    "kind": "payment",
+                    "currency": "MXN",
+                    "exchangeRate": null,
+                    "originalPaidAmount": "300.00",
+                    "originalPlatformFee": "0.00",
+                    "originalTaxAmount": "0.00",
+                    "clientPaidAmount": "300.00",
+                    "platformFee": "0.00",
+                    "taxAmount": "0.00",
+                    "netAmount": "300.00"
+                }
+            ]
+        }
+    },
+    {
+        "step": "monthly report 2026-01",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "month": "2026-01",
+            "currency": "MXN",
+            "clientPaidTotal": "0.00",
+            "platformFeeTotal": "0.00",
+            "taxTotal": "0.00",
+            "netReceivedTotal": "0.00",
+            "unconvertedPaymentCount": 0,
+            "payments": [],
+            "movements": []
+        }
+    },
+    {
+        "step": "monthly report of another account",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "month": "2025-12",
+            "currency": "MXN",
+            "clientPaidTotal": "0.00",
+            "platformFeeTotal": "0.00",
+            "taxTotal": "0.00",
+            "netReceivedTotal": "0.00",
+            "unconvertedPaymentCount": 0,
+            "payments": [],
+            "movements": []
+        }
+    },
+    {
+        "step": "monthly report export",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": [
+            [
+                "Periodo",
+                "Fecha",
+                "Concepto",
+                "ID de cobro",
+                "ID de movimiento",
+                "Moneda original",
+                "MXN por USD",
+                "Abonado original",
+                "Comisión original",
+                "Impuesto original",
+                "Abonado MXN",
+                "Comisión MXN",
+                "Impuesto MXN",
+                "Neto MXN"
+            ],
+            [
+                "2025-12",
+                "2025-12-03",
+                "Impuesto pagado por separado",
+                "<id:6>",
+                "<id:11>",
+                "MXN",
+                "",
+                "0.00",
+                "0.00",
+                "50.00",
+                "0.00",
+                "0.00",
+                "50.00",
+                "-50.00"
+            ],
+            [
+                "2025-12",
+                "2025-12-02",
+                "Comisión pagada por separado",
+                "<id:6>",
+                "<id:10>",
+                "MXN",
+                "",
+                "0.00",
+                "50.00",
+                "0.00",
+                "0.00",
+                "50.00",
+                "0.00",
+                "-50.00"
+            ],
+            [
+                "2025-12",
+                "2025-12-01",
+                "Abono y deducciones",
+                "<id:9>",
+                "<id:9>",
+                "USD",
+                "17.25",
+                "100.00",
+                "5.00",
+                "3.00",
+                "1725.00",
+                "86.25",
+                "51.75",
+                "1587.00"
+            ],
+            [
+                "2025-12",
+                "2025-12-01",
+                "Abono y deducciones",
+                "<id:8>",
+                "<id:8>",
+                "MXN",
+                "",
+                "500.00",
+                "0.00",
+                "0.00",
+                "500.00",
+                "0.00",
+                "0.00",
+                "500.00"
+            ],
+            [
+                "2025-12",
+                "2025-12-01",
+                "Abono y deducciones",
+                "<id:7>",
+                "<id:7>",
+                "MXN",
+                "",
+                "300.00",
+                "0.00",
+                "0.00",
+                "300.00",
+                "0.00",
+                "0.00",
+                "300.00"
+            ]
+        ]
+    },
+    {
+        "step": "monthly report with an invalid month",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Revisa el mes y la moneda"
+            }
+        }
+    },
+    {
+        "step": "project balances",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "projects": [
+                {
+                    "projectId": "<id:4>",
+                    "name": "Identidad visual 2026",
+                    "currency": "MXN",
+                    "agreedAmount": "5000.00",
+                    "clientPaidTotal": "5600.00",
+                    "unconvertedPaymentCount": 0,
+                    "isBalanceProvisional": false,
+                    "outstandingBalance": "0.00",
+                    "excessAmount": "600.00",
+                    "collectionStatus": "overpaid"
+                },
+                {
+                    "projectId": "<id:5>",
+                    "name": "Sitio web",
+                    "currency": "MXN",
+                    "agreedAmount": "5000.00",
+                    "clientPaidTotal": "1725.00",
+                    "unconvertedPaymentCount": 0,
+                    "isBalanceProvisional": false,
+                    "outstandingBalance": "3275.00",
+                    "excessAmount": "0.00",
+                    "collectionStatus": "outstanding"
+                }
+            ],
+            "totalOutstandingBalance": "3275.00",
+            "pendingProjectCount": 1,
+            "excludedUnconvertedProjectCount": 0
+        }
+    },
+    {
+        "step": "dashboard",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "clients": [
+                {
+                    "id": "<id:3>",
+                    "name": "Estudio Norte S.A.",
+                    "createdOn": "9999-99-99"
+                }
+            ],
+            "projects": [
+                {
+                    "id": "<id:4>",
+                    "name": "Identidad visual 2026",
+                    "clientId": "<id:3>",
+                    "createdOn": "9999-99-99"
+                },
+                {
+                    "id": "<id:5>",
+                    "name": "Sitio web",
+                    "clientId": "<id:3>",
+                    "createdOn": "9999-99-99"
+                }
+            ],
+            "payments": [
+                {
+                    "id": "<id:6>",
+                    "projectId": "<id:4>",
+                    "clientPaidAmount": "4800",
+                    "currency": "MXN",
+                    "paidOn": "2025-11-30"
+                },
+                {
+                    "id": "<id:7>",
+                    "projectId": "<id:4>",
+                    "clientPaidAmount": "300",
+                    "currency": "MXN",
+                    "paidOn": "2025-12-01"
+                },
+                {
+                    "id": "<id:8>",
+                    "projectId": "<id:4>",
+                    "clientPaidAmount": "500",
+                    "currency": "MXN",
+                    "paidOn": "2025-12-01"
+                },
+                {
+                    "id": "<id:9>",
+                    "projectId": "<id:5>",
+                    "clientPaidAmount": "100",
+                    "currency": "USD",
+                    "paidOn": "2025-12-01"
+                }
+            ],
+            "activeClientCount": 1,
+            "clientCount": 1,
+            "projectCount": 2,
+            "paymentCount": 4,
+            "month": "<current-month>",
+            "chargeMonths": [
+                "2025-12"
+            ],
+            "currency": "MXN",
+            "monthlyPaidTotals": {
+                "2025-11": "4800.000000",
+                "2025-12": "2525.000000"
+            },
+            "clientPaidTotal": "0.00"
+        }
+    },
+    {
+        "step": "dashboard of an empty account",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "clients": [],
+            "projects": [],
+            "payments": [],
+            "activeClientCount": 0,
+            "clientCount": 0,
+            "projectCount": 0,
+            "paymentCount": 0,
+            "month": "<current-month>",
+            "chargeMonths": [],
+            "currency": "MXN",
+            "monthlyPaidTotals": [],
+            "clientPaidTotal": "0.00"
+        }
+    }
+]

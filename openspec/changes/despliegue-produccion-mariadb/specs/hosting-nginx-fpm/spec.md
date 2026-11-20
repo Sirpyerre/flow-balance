@@ -17,6 +17,37 @@ HTTP a HTTPS. El frontend y `/api` MUST compartir el mismo origen.
 - **WHEN** el navegador carga la interfaz y llama a `/api/auth/session`
 - **THEN** ambas solicitudes van al mismo origen y la cookie se envía
 
+### Requirement: Cloudflare delante del origen
+El nombre de host de la aplicación MUST resolverse a través del proxy de Cloudflare con el modo
+SSL/TLS en Full (strict), usando un certificado de origen válido para ese nombre. La
+configuración de Cloudflare para el host MUST omitir la caché de todo el contenido excepto
+`/_astro/*`, y MUST tener desactivadas las funciones que reescriben HTML o JavaScript (Rocket
+Loader, Auto Minify, Email Obfuscation).
+
+#### Scenario: Vista privada tras el proxy
+- **WHEN** se solicita `/dashboard` a través de Cloudflare
+- **THEN** la respuesta no se sirve desde la caché de Cloudflare y conserva
+  `Cache-Control: private, no-store`
+
+#### Scenario: Certificado de origen
+- **WHEN** Cloudflare se conecta al origen en modo Full (strict)
+- **THEN** el certificado presentado cubre el nombre de host de la aplicación
+
+### Requirement: IP real del cliente detrás de Cloudflare
+La aplicación MUST recibir en `REMOTE_ADDR` la IP del visitante, tomada de `CF-Connecting-IP`
+únicamente cuando la conexión proviene de un rango de Cloudflare. Un encabezado
+`CF-Connecting-IP` enviado desde cualquier otra dirección MUST ignorarse. El limitador de inicios
+de sesión MUST contar los intentos por la IP del visitante.
+
+#### Scenario: Encabezado falsificado
+- **WHEN** una solicitud llega desde una dirección fuera de los rangos de Cloudflare con un
+  `CF-Connecting-IP` arbitrario
+- **THEN** `REMOTE_ADDR` conserva la dirección real de la conexión
+
+#### Scenario: Visitantes distintos
+- **WHEN** dos visitantes con IP distintas llegan por el mismo borde de Cloudflare
+- **THEN** los intentos fallidos de inicio de sesión de uno no bloquean al otro
+
 ### Requirement: Enrutamiento estático y API
 Las rutas que no empiezan por `/api` MUST servirse como archivos estáticos compilados, y las
 que empiezan por `/api` MUST llegar a la aplicación PHP. Ninguna otra ruta PHP MUST ser

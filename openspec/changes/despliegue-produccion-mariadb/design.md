@@ -29,8 +29,24 @@ con `validate_timestamps=1` cada 60 s y `realpath_cache_ttl` de 600 s.
   `numeric` sin precisión fija, acotados con `CHECK (... < 100000000000000 AND scale(...) <= 2)`
   (`20261118000800_create_payment_charges.php:16`) y `scale(exchange_rate) <= 6`
   (`20261119000300_add_payment_exchange_rate.php:11-13`).
-- `users.email_normalized` es una columna generada con `lower(btrim(...))`
-  (`20261118000100_create_users.php:16`).
+- El correo se normaliza en SQL con `lower(btrim(x, <espacio, tab, LF, CR, FF, VT>))`: lo hace la
+  columna generada `users.email_normalized` (`20261118000100_create_users.php:16`) y también
+  `LoginUser.php:17`, que le pregunta a la base el valor antes de buscar.
+- El limitador de inicios de sesión guarda sus fallos en `login_throttles.failed_at`, un arreglo
+  `timestamptz[]` (`20261118000200_create_authentication_state.php:26`), que `LoginUser.php:26,45,55`
+  lee con `array_to_json` y escribe con `ARRAY(SELECT ... json_array_elements_text(...))`;
+  `blocked_until` se lee con `extract(epoch ...)`.
+- El dashboard formatea importes con `trim_scale(...)::text` (`4800`, no `4800.00`) y las fechas de
+  creación con `created_at AT TIME ZONE 'America/Mexico_City'`
+  (`PostgresAccountDataReader.php:16-19`); la referencia de caracterización ya fija ambos formatos.
+- Un correo duplicado se reconoce por el SQLSTATE `23505` y el nombre de la restricción entre comillas
+  dobles en el mensaje (`RegisterUser.php:29`), formato propio de PostgreSQL.
+- Cinco consultas usan `FILTER (WHERE ...)` (`PostgresOwnedResourceRepository.php:63`,
+  `PostgresMonthlyReportReader.php:46`, `PostgresPaymentCorrectionRepository.php:43-44`,
+  `PostgresProjectBalanceReportReader.php:22`) y varias `CAST(? AS numeric)`
+  (`PaymentConversion.php:36-37`, `PaymentExcess.php:27-28`).
+- Las pruebas de integración existentes también usan SQL de PostgreSQL: `->>`, `RETURNING`,
+  `repeat()` y `SET lock_timeout` (`AccountAccessTest.php`, `IncomeIdempotencyTest.php`).
 - La sesión se lee con `strtotime($row['expires_at'])` (`PostgresSessionPersistence.php:34-35`):
   hoy PostgreSQL devuelve el instante con su desfase; MariaDB devolverá texto sin zona.
 - La política de caché privada solo existe en un plugin de Vite de desarrollo y vista previa
@@ -39,6 +55,12 @@ con `validate_timestamps=1` cada 60 s y `realpath_cache_ttl` de 600 s.
   `APP_ORIGIN`; `:70-73` exige `APP_SECRET` de 32 caracteres o más.
 - Dotenv se carga con `createImmutable(...)->safeLoad()` (`config/database.php:8`), que no usa
   `putenv`, así que `disable_functions` no lo afecta.
+- El blog ya está detrás de Cloudflare. `/etc/nginx/sites-enabled/monoforms.conf:26-48` declara
+  `set_real_ip_from` para los rangos de Cloudflare y `real_ip_header CF-Connecting-IP` antes de sus
+  bloques `server` (desde la línea 61), y los tres usan `/etc/nginx/ssl/cloudflare-origin.pem`, un
+  certificado de origen con SAN `*.monoforms.com` y `monoforms.com`, vigente hasta 2041.
+- Resultado de `verificar-servidor.sh` del 2026-11-20: 0 fallas; `ufw` permite solo 22, 80 y 443;
+  `slow_query_log=1` y `general_log=0`; 472 MB de RAM disponibles.
 
 ## Goals / Non-Goals
 
@@ -75,6 +97,7 @@ añade complejidad para un camino que nunca se recorrerá.
 | `numeric` tipo de cambio, escala 6 | `DECIMAL(20,6)` | |
 | `timestamptz` | `DATETIME(6)` en UTC | `TIMESTAMP` descartado: límite 2038 |
 | `jsonb` (payload de sesión) | `JSON` (alias de `LONGTEXT` con `JSON_VALID`) | Solo se lee y escribe completo |
+| `timestamptz[]` (`login_throttles.failed_at`) | `JSON NOT NULL DEFAULT '[]'` con segundos epoch enteros | Ver D21 |
 | `text` | `VARCHAR(n)` o `TEXT` según uso | |
 
 ### D3. Colación: insensible para texto de usuario, binaria para claves
@@ -83,12 +106,16 @@ El servidor usa `utf8mb4_unicode_ci`. Es adecuada para nombres y correo, pero
 **las claves de idempotencia, `token_hash` y `key_hash` MUST ser `utf8mb4_bin`**: con una colación
 insensible, `ABC` y `abc` colisionarían y romperían la idempotencia y el hash de sesión.
 
-### D4. `email_normalized` calculado en PHP
+### D4. La normalización del correo vive en PHP
 
-El `lower(btrim(...))` con un conjunto de caracteres no se traduce a `TRIM` de MariaDB, que
-recorta una sola cadena. Se guarda como columna normal con `UNIQUE`, y la aplicación la calcula
-(ya busca por ese valor, `LoginUser.php:35`). *Alternativa descartada:* columna generada con
-`REGEXP_REPLACE`, más frágil y difícil de probar.
+`TRIM` de MariaDB recorta una sola cadena, no un conjunto de caracteres, así que
+`lower(btrim(x, <conjunto>))` no se traduce, y una columna generada con `REGEXP_REPLACE` sería más
+frágil y difícil de probar. La normalización se mueve a un único método de PHP, usado por registro y
+por inicio de sesión: recorta ese mismo conjunto (espacio, tab, LF, CR, FF, VT) y pasa a minúsculas
+con `mb_strtolower`. `RegisterUser` inserta el valor ya normalizado en una columna normal con
+`UNIQUE`, y `LoginUser` deja de consultarlo a la base. Una prueba de paridad fija el resultado con
+mayúsculas, espacios, tabuladores y letras acentuadas. *Alternativa descartada:* columna generada;
+obliga a mantener dos implementaciones del mismo criterio.
 
 ### D5. Aislamiento `READ COMMITTED`
 
@@ -200,8 +227,9 @@ explícita. *Alternativa descartada:* usar `/api/auth/csrf`, que abre sesión y 
 El vhost fija `Cache-Control: private, no-store` en `/dashboard`, `/clients`, `/projects`,
 `/payments` y `/api/`, `no-cache` en `/service-worker.js`, e `immutable` en `/_astro/`
 (`astro.config.mjs:45-54` y el service worker excluyen `/api` de su caché). El vhost no hereda
-`fastcgi_cache` de la zona `drupal`. Solo gzip: Brotli y HTTP/3 no están confirmados en el
-paquete de Ubuntu y `nginx -t` es una puerta en el despliegue.
+`fastcgi_cache` de la zona `drupal`. Solo gzip: el paquete de Ubuntu no compila Brotli ni HTTP/3
+(confirmado en el servidor), y no hacen falta porque Cloudflare los sirve al visitante. `nginx -t`
+es una puerta en el despliegue.
 
 ### D18. Límites del pool de la aplicación
 
@@ -217,8 +245,77 @@ verificación de plataforma del lock, `astro build`) y `deploy.yml` (manual o tr
 `production`). El despliegue construye `vendor/` con `--no-dev --optimize-autoloader` y
 `frontend/dist/`, arma el paquete desde una lista blanca (no una lista negra: lo nuevo no se
 filtra por descuido), falla si aparece una ruta prohibida, sube con `rsync` sobre SSH con huella
-fijada, respalda con `mariadb-dump --single-transaction`, migra, activa, consulta la salud y
+fijada, respalda con `mariadb-dump --single-transaction`, migra, activa, consulta la salud desde el propio servidor (D20) y
 revierte si falla.
+
+### D20. Cloudflare delante del origen
+
+- **IP real del cliente: se reutiliza la configuración existente, sin duplicarla.** El vhost de
+  Flow hereda `set_real_ip_from` y `real_ip_header CF-Connecting-IP`, de modo que `REMOTE_ADDR`
+  en PHP es la IP del visitante y el limitador de inicios de sesión (`ClientIpResolver`) cuenta
+  por ella. `TRUSTED_API_PROXY_PEERS` y `CLIENT_IP_PROXY_TOKEN` quedan vacíos. Un encabezado
+  falsificado desde fuera de los rangos de Cloudflare se ignora. *Alternativa descartada:* mover
+  esa configuración a un fragmento compartido; implica editar `monoforms.conf` y arriesgar el
+  blog por un cambio de orden estético.
+- **Certificado: se reutiliza el comodín de origen** (`*.monoforms.com`, hasta 2041). No se
+  instala certbot ni se guarda ningún token de la API de Cloudflare en el servidor. *Alternativa
+  descartada:* Let's Encrypt por DNS-01; exige un token con permiso de editar el DNS de toda la
+  zona en un servidor compartido con el blog.
+- **Modo SSL de Cloudflare: Full (strict).** Con el origen ya en HTTPS y un certificado de origen
+  válido, es el modo que no degrada el cifrado de extremo a extremo.
+- **Caché de Cloudflare.** Omitir (bypass) todo el subdominio salvo `/_astro/*`, y apagar Rocket
+  Loader, Auto Minify y Email Obfuscation: reescriben HTML y JavaScript y pueden romper las islas
+  de React y el service worker. La política `private, no-store` de D17 sigue siendo la fuente
+  de verdad.
+- **La salud se comprueba desde el servidor, no desde el runner.** `release.sh` consulta
+  `/api/health` por loopback con `curl -k --resolve <host>:443:127.0.0.1`. El `-k` se justifica
+  porque la CA de origen de Cloudflare no está en el almacén del sistema y la conexión es local.
+  Una consulta desde GitHub pasaría por el WAF de Cloudflare, que podría desafiarla como bot y
+  disparar una reversión falsa.
+
+### D21. Limitador de inicios de sesión sin arreglos
+
+MariaDB no tiene arreglos. `login_throttles.failed_at` pasa a `JSON NOT NULL DEFAULT '[]'` con
+segundos epoch enteros. PHP ya filtra y arma la lista (`LoginUser.php:50-52`), así que el SQL solo
+guarda y devuelve el texto: desaparecen `array_to_json`, el `ARRAY(...)` y los `strtotime` sobre
+fechas, y con ellos la dependencia de la zona horaria. `blocked_until` es `DATETIME(6)` y se lee con
+`UNIX_TIMESTAMP()`. El límite (5 fallos en 900 s) y las respuestas no cambian.
+*Alternativa descartada:* una tabla hija con una fila por intento; añade un `JOIN` y una escritura
+por fallo para guardar como máximo 5 valores.
+
+### D22. Formatos que hoy produce PostgreSQL se reproducen en PHP
+
+`trim_scale(client_paid_amount)::text` devuelve `4800`; un `DECIMAL(16,2)` devolvería `4800.00`. El
+formato se reproduce al armar la fila, con una función única compartida por los lectores. Las fechas
+de creación (`created_at AT TIME ZONE 'America/Mexico_City'`) necesitarían `CONVERT_TZ` con nombre de
+zona, que solo funciona si el servidor tiene cargadas las tablas de zonas horarias; no se asume.
+La conversión de UTC a `America/Mexico_City` se hace en PHP con `DateTimeImmutable`.
+*Alternativa descartada:* cargar las tablas con `mysql_tzinfo_to_sql` en el VPS; es cambiar un
+servidor compartido con el blog por algo que PHP resuelve solo.
+
+### D23. Unicidad y errores del motor
+
+Una clave duplicada llega en MariaDB como SQLSTATE `23000` con código de controlador `1062` y el
+nombre de la restricción entre comillas simples (`Duplicate entry ... for key '...'`). La detección
+de `RegisterUser.php:29` pasa a `errorInfo[1] === 1062` más el nombre de la restricción, en un único
+método. `SAVEPOINT`, `ROLLBACK TO SAVEPOINT` y `RELEASE SAVEPOINT` de `UnitOfWork.php:31-38` son
+válidos en InnoDB sin cambios. Un interbloqueo (código 1213) llega como `PDOException` y la ruta ya
+lo convierte en el 503 genérico (`config/routes.php:44-48`).
+
+### D24. Construcciones sin equivalente directo
+
+| PostgreSQL | MariaDB |
+|---|---|
+| `agg(x) FILTER (WHERE c)` | `agg(CASE WHEN c THEN x END)` |
+| `x::text`, `CAST(x AS text)` | `CAST(x AS CHAR)` |
+| `to_char(d, 'YYYY-MM')` | `DATE_FORMAT(d, '%Y-%m')` |
+| `CAST(? AS numeric)` | `CAST(? AS DECIMAL(16,2))` para importes y `DECIMAL(20,6)` para la tasa |
+| `(a, b) < (?, ?)` | igual (comparación de filas soportada) |
+| `GREATEST`, `COALESCE`, `ROUND` | igual |
+
+La fila de `CAST ... numeric` es una trampa: en MariaDB `DECIMAL` sin parámetros es `DECIMAL(10,0)` y
+truncaría los importes sin avisar. La precisión se fija en cada `CAST`, dimensionada para que
+`importe × tasa` quepa (`DECIMAL(36,8)`); las fronteras de `PaymentRoundingTest` lo comprueban.
 
 ## Risks / Trade-offs
 
@@ -242,6 +339,13 @@ revierte si falla.
 - [Restaurar un respaldo es desconocido en la práctica] → una tarea ensaya la restauración en una
   base temporal antes de producción.
 
+- [El vhost de Flow depende de `real_ip` definido en el archivo del blog] → si alguien lo quita,
+  el limitador de login vería IPs de Cloudflare y bloquearía a visitantes distintos a la vez. Se
+  mitiga con la prueba de la tarea 7.5 y con la comprobación de `verificar-servidor.sh`.
+- [El origen acepta conexiones directas en 80 y 443 sin pasar por Cloudflare] → no se restringe
+  porque afectaría al blog y queda fuera de alcance; `real_ip` ignora encabezados falsificados, y
+  la app no depende de que el tráfico llegue por Cloudflare.
+
 ## Migration Plan
 
 1. Rama `feat/despliegue-mariadb-vps`. Capturar referencias de caracterización sobre PostgreSQL
@@ -249,10 +353,11 @@ revierte si falla.
 2. PHP 8.3, lock regenerado y `APP_ENV=production` con fallos seguros.
 3. Archivos de `deploy/` (Nginx, FPM, `.env.example` de producción) y el script de verificación.
 4. Verificar el servidor con `verificar-servidor.sh`; aplicar sus pendientes (base, usuario,
-   pool, usuario de sistema, DNS y certificado) de forma manual y documentada.
+   pool, usuario de sistema y registro DNS en Cloudflare; el certificado comodín ya existe) de forma
+   manual y documentada.
 5. Primer despliegue contra un dominio provisional con la base ya creada; recorrer el flujo
    completo (registro, cliente, proyecto, cobro MXN y USD, reporte, cierre de sesión).
-6. Fijar el subdominio definitivo en `APP_ORIGIN`, emitir su certificado y desplegar.
+6. Fijar el subdominio definitivo en `APP_ORIGIN`, crear su registro DNS con proxy y desplegar.
 
 Reversión: cambiar el enlace `current` al release anterior (inmediato, sin reconstruir). Si
 hubo migraciones, restaurar el respaldo previo a esa migración. El blog nunca se detiene en
@@ -260,7 +365,7 @@ ninguno de los casos.
 
 ## Open Questions
 
-- Subdominio definitivo de Flow Balance. Solo bloquea DNS, certificado y el valor de
+- Subdominio definitivo de Flow Balance. Solo bloquea el registro DNS y el valor de
   `APP_ORIGIN` del primer despliegue real, no el trabajo previo.
 - Si Playwright se ejecuta también en CI o solo localmente. No altera el diseño; se decide al
   escribir `ci.yml`.

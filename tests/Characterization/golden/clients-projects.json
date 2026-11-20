@@ -1,0 +1,226 @@
+[
+    {
+        "step": "create client",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:3>",
+            "name": "Estudio Norte"
+        }
+    },
+    {
+        "step": "create client without a name",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Escribe entre 1 y 100 caracteres.",
+                "fields": {
+                    "name": "Escribe entre 1 y 100 caracteres."
+                }
+            }
+        }
+    },
+    {
+        "step": "create client unauthenticated",
+        "status": 401,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "authentication_required",
+                "message": "Inicia sesión para continuar"
+            }
+        }
+    },
+    {
+        "step": "get client",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:3>",
+            "name": "Estudio Norte"
+        }
+    },
+    {
+        "step": "get client of another account",
+        "status": 404,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Recurso no disponible"
+            }
+        }
+    },
+    {
+        "step": "rename client",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:3>",
+            "name": "Estudio Norte S.A."
+        }
+    },
+    {
+        "step": "rename client with an empty name",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Ingresa un nombre de 1 a 100 caracteres"
+            }
+        }
+    },
+    {
+        "step": "create project",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:4>",
+            "name": "Identidad visual",
+            "clientId": "<id:3>",
+            "agreedAmount": "5000.00",
+            "agreedCurrency": "MXN",
+            "agreedPaymentCount": 3,
+            "acquisitionSource": "Recomendación",
+            "deliveryStatus": "in_progress",
+            "canChangeClient": true,
+            "paymentCount": 0,
+            "unconvertedPaymentCount": 0,
+            "clientPaidTotal": "0.00",
+            "payments": [],
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "isBalanceProvisional": false,
+            "outstandingBalance": "5000.00",
+            "excessAmount": "0.00",
+            "collectionStatus": "outstanding"
+        }
+    },
+    {
+        "step": "create project in another account",
+        "status": 404,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Recurso no disponible"
+            }
+        }
+    },
+    {
+        "step": "create project with an invalid payment count",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Indica una cantidad entera de pagos mayor que cero.",
+                "fields": {
+                    "agreedPaymentCount": "Indica una cantidad entera de pagos mayor que cero."
+                }
+            }
+        }
+    },
+    {
+        "step": "get project",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:4>",
+            "name": "Identidad visual",
+            "clientId": "<id:3>",
+            "agreedAmount": "5000.00",
+            "agreedCurrency": "MXN",
+            "agreedPaymentCount": 3,
+            "acquisitionSource": "Recomendación",
+            "deliveryStatus": "in_progress",
+            "canChangeClient": true,
+            "paymentCount": 0,
+            "unconvertedPaymentCount": 0,
+            "clientPaidTotal": "0.00",
+            "payments": [],
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "isBalanceProvisional": false,
+            "outstandingBalance": "5000.00",
+            "excessAmount": "0.00",
+            "collectionStatus": "outstanding"
+        }
+    },
+    {
+        "step": "rename project",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:4>",
+            "name": "Identidad visual 2026",
+            "clientId": "<id:3>",
+            "agreedAmount": "5000.00",
+            "agreedCurrency": "MXN",
+            "agreedPaymentCount": 3,
+            "acquisitionSource": "Recomendación",
+            "deliveryStatus": "in_progress"
+        }
+    },
+    {
+        "step": "mark project as delivered",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:4>",
+            "name": "Identidad visual 2026",
+            "clientId": "<id:3>",
+            "agreedAmount": "5000.00",
+            "agreedCurrency": "MXN",
+            "agreedPaymentCount": 3,
+            "acquisitionSource": "Recomendación",
+            "deliveryStatus": "delivered"
+        }
+    },
+    {
+        "step": "set an invalid delivery status",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Selecciona un estado de entrega válido"
+            }
+        }
+    },
+    {
+        "step": "create second project",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:5>",
+            "name": "Sitio web",
+            "clientId": "<id:3>",
+            "agreedAmount": "5000.00",
+            "agreedCurrency": "MXN",
+            "agreedPaymentCount": 2,
+            "acquisitionSource": "Upwork",
+            "deliveryStatus": "in_progress",
+            "canChangeClient": true,
+            "paymentCount": 0,
+            "unconvertedPaymentCount": 0,
+            "clientPaidTotal": "0.00",
+            "payments": [],
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "isBalanceProvisional": false,
+            "outstandingBalance": "5000.00",
+            "excessAmount": "0.00",
+            "collectionStatus": "outstanding"
+        }
+    }
+]

@@ -1,0 +1,708 @@
+[
+    {
+        "step": "preview a payment in MXN",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "receivedAmount": "4600.00",
+            "currency": "MXN",
+            "equivalents": {
+                "clientPaidAmount": "4800.00",
+                "platformFee": "150.25",
+                "withheldTaxAmount": "49.75",
+                "receivedAmount": "4600.00"
+            },
+            "projectedClientPaidTotal": "4800.00",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "200.00",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "payment with an impossible date",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Indica una fecha de pago válida y no posterior a hoy.",
+                "fields": {
+                    "paidOn": "Indica una fecha de pago válida y no posterior a hoy."
+                }
+            }
+        }
+    },
+    {
+        "step": "record the first payment",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:6>",
+            "version": "1",
+            "projectId": "<id:4>",
+            "clientPaidAmount": "4800.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-11-30",
+            "platformFee": "150.25",
+            "withheldTaxAmount": "49.75",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:4>",
+                "name": "Identidad visual 2026",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 3,
+                "acquisitionSource": "Recomendación",
+                "deliveryStatus": "delivered"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "4600.00",
+            "equivalents": {
+                "clientPaidAmount": "4800.00",
+                "platformFee": "150.25",
+                "withheldTaxAmount": "49.75",
+                "receivedAmount": "4600.00"
+            },
+            "conversionPending": false,
+            "charges": [],
+            "projectedClientPaidTotal": "4800.00",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "200.00",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "replay the first payment",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:6>",
+            "version": "1",
+            "projectId": "<id:4>",
+            "clientPaidAmount": "4800.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-11-30",
+            "platformFee": "150.25",
+            "withheldTaxAmount": "49.75",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:4>",
+                "name": "Identidad visual 2026",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 3,
+                "acquisitionSource": "Recomendación",
+                "deliveryStatus": "delivered"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "4600.00",
+            "equivalents": {
+                "clientPaidAmount": "4800.00",
+                "platformFee": "150.25",
+                "withheldTaxAmount": "49.75",
+                "receivedAmount": "4600.00"
+            },
+            "conversionPending": false,
+            "charges": []
+        }
+    },
+    {
+        "step": "reuse a key with another date",
+        "status": 409,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "idempotency_conflict",
+                "message": "La clave ya se usó para otro cobro."
+            }
+        }
+    },
+    {
+        "step": "payment above the agreed amount without a reason",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Indica por qué el total supera el monto acordado.",
+                "fields": {
+                    "excessReason": "Indica por qué el total supera el monto acordado."
+                }
+            },
+            "projectedClientPaidTotal": "5300.00",
+            "excessAmount": "300.00",
+            "projectedOutstandingBalance": "0.00",
+            "requiresExcessReason": true
+        }
+    },
+    {
+        "step": "payment with an excess reason",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:7>",
+            "version": "1",
+            "projectId": "<id:4>",
+            "clientPaidAmount": "300.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-12-01",
+            "platformFee": "0.00",
+            "withheldTaxAmount": "0.00",
+            "sourceType": "platform",
+            "sourceName": "Upwork",
+            "excessReason": "Pago adicional",
+            "project": {
+                "id": "<id:4>",
+                "name": "Identidad visual 2026",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 3,
+                "acquisitionSource": "Recomendación",
+                "deliveryStatus": "delivered"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "300.00",
+            "equivalents": {
+                "clientPaidAmount": "300.00",
+                "platformFee": "0.00",
+                "withheldTaxAmount": "0.00",
+                "receivedAmount": "300.00"
+            },
+            "conversionPending": false,
+            "charges": [],
+            "projectedClientPaidTotal": "5100.00",
+            "excessAmount": "100.00",
+            "projectedOutstandingBalance": "0.00",
+            "requiresExcessReason": true
+        }
+    },
+    {
+        "step": "retry the second payment with a reason",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:8>",
+            "version": "1",
+            "projectId": "<id:4>",
+            "clientPaidAmount": "500.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-12-01",
+            "platformFee": "0.00",
+            "withheldTaxAmount": "0.00",
+            "sourceType": "platform",
+            "sourceName": "Upwork",
+            "excessReason": "Trabajo adicional",
+            "project": {
+                "id": "<id:4>",
+                "name": "Identidad visual 2026",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 3,
+                "acquisitionSource": "Recomendación",
+                "deliveryStatus": "delivered"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "500.00",
+            "equivalents": {
+                "clientPaidAmount": "500.00",
+                "platformFee": "0.00",
+                "withheldTaxAmount": "0.00",
+                "receivedAmount": "500.00"
+            },
+            "conversionPending": false,
+            "charges": [],
+            "projectedClientPaidTotal": "5600.00",
+            "excessAmount": "600.00",
+            "projectedOutstandingBalance": "0.00",
+            "requiresExcessReason": true
+        }
+    },
+    {
+        "step": "preview a payment in USD",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "receivedAmount": "92.00",
+            "currency": "USD",
+            "equivalents": {
+                "clientPaidAmount": "1725.00",
+                "platformFee": "86.25",
+                "withheldTaxAmount": "51.75",
+                "receivedAmount": "1587.00"
+            },
+            "projectedClientPaidTotal": "1725.00",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "3275.00",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "preview a USD payment that rounds",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "receivedAmount": "0.00",
+            "currency": "USD",
+            "equivalents": {
+                "clientPaidAmount": "0.02",
+                "platformFee": "0.01",
+                "withheldTaxAmount": "0.01",
+                "receivedAmount": "0.00"
+            },
+            "projectedClientPaidTotal": "0.02",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "4999.98",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "preview with a malformed exchange rate",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Indica un tipo de cambio positivo de MXN por USD con hasta seis decimales.",
+                "fields": {
+                    "exchangeRate": "Indica un tipo de cambio positivo de MXN por USD con hasta seis decimales."
+                }
+            }
+        }
+    },
+    {
+        "step": "record a payment in USD",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:9>",
+            "version": "1",
+            "projectId": "<id:5>",
+            "clientPaidAmount": "100.00",
+            "currency": "USD",
+            "exchangeRate": "17.25",
+            "paidOn": "2025-11-30",
+            "platformFee": "5.00",
+            "withheldTaxAmount": "3.00",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:5>",
+                "name": "Sitio web",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 2,
+                "acquisitionSource": "Upwork",
+                "deliveryStatus": "in_progress"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "92.00",
+            "equivalents": {
+                "clientPaidAmount": "1725.00",
+                "platformFee": "86.25",
+                "withheldTaxAmount": "51.75",
+                "receivedAmount": "1587.00"
+            },
+            "conversionPending": false,
+            "charges": [],
+            "projectedClientPaidTotal": "1725.00",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "3275.00",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "replay the USD payment",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:9>",
+            "version": "1",
+            "projectId": "<id:5>",
+            "clientPaidAmount": "100.00",
+            "currency": "USD",
+            "exchangeRate": "17.25",
+            "paidOn": "2025-11-30",
+            "platformFee": "5.00",
+            "withheldTaxAmount": "3.00",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:5>",
+                "name": "Sitio web",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 2,
+                "acquisitionSource": "Upwork",
+                "deliveryStatus": "in_progress"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "92.00",
+            "equivalents": {
+                "clientPaidAmount": "1725.00",
+                "platformFee": "86.25",
+                "withheldTaxAmount": "51.75",
+                "receivedAmount": "1587.00"
+            },
+            "conversionPending": false,
+            "charges": []
+        }
+    },
+    {
+        "step": "add a separate commission",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:10>",
+            "chargeType": "commission",
+            "paidOn": "2025-12-02",
+            "amount": "50.00",
+            "currency": "MXN"
+        }
+    },
+    {
+        "step": "replay the commission",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:10>",
+            "chargeType": "commission",
+            "paidOn": "2025-12-02",
+            "amount": "50.00",
+            "currency": "MXN"
+        }
+    },
+    {
+        "step": "reuse the commission key with another amount",
+        "status": 409,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "idempotency_conflict",
+                "message": "La clave ya se usó para otro cargo."
+            }
+        }
+    },
+    {
+        "step": "add a separate tax",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:11>",
+            "chargeType": "tax",
+            "paidOn": "2025-12-03",
+            "amount": "50.00",
+            "currency": "MXN"
+        }
+    },
+    {
+        "step": "add a charge with three decimals",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Ingresa un importe válido con hasta 14 dígitos enteros y dos decimales.",
+                "fields": {
+                    "amount": "Ingresa un importe válido con hasta 14 dígitos enteros y dos decimales."
+                }
+            }
+        }
+    },
+    {
+        "step": "get the payment with its charges",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:6>",
+            "version": "3",
+            "projectId": "<id:4>",
+            "clientPaidAmount": "4800.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-11-30",
+            "platformFee": "150.25",
+            "withheldTaxAmount": "49.75",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:4>",
+                "name": "Identidad visual 2026",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 3,
+                "acquisitionSource": "Recomendación",
+                "deliveryStatus": "delivered"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "4600.00",
+            "equivalents": {
+                "clientPaidAmount": "4800.00",
+                "platformFee": "150.25",
+                "withheldTaxAmount": "49.75",
+                "receivedAmount": "4600.00"
+            },
+            "conversionPending": false,
+            "charges": [
+                {
+                    "id": "<id:10>",
+                    "chargeType": "commission",
+                    "paidOn": "2025-12-02",
+                    "amount": "50.00",
+                    "currency": "MXN"
+                },
+                {
+                    "id": "<id:11>",
+                    "chargeType": "tax",
+                    "paidOn": "2025-12-03",
+                    "amount": "50.00",
+                    "currency": "MXN"
+                }
+            ]
+        }
+    },
+    {
+        "step": "get the payment of another account",
+        "status": 404,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Recurso no disponible"
+            }
+        }
+    },
+    {
+        "step": "preview a correction",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "receivedAmount": "112.00",
+            "projectedOutstandingBalance": "2930.00",
+            "excessAmount": "0.00",
+            "requiresExcessReason": false,
+            "isBalanceProvisional": false
+        }
+    },
+    {
+        "step": "correct the USD payment keeping its rate",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:9>",
+            "version": "2",
+            "projectId": "<id:5>",
+            "clientPaidAmount": "100.00",
+            "currency": "USD",
+            "exchangeRate": "17.25",
+            "paidOn": "2025-12-01",
+            "platformFee": "5.00",
+            "withheldTaxAmount": "3.00",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:5>",
+                "name": "Sitio web",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 2,
+                "acquisitionSource": "Upwork",
+                "deliveryStatus": "in_progress"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "92.00",
+            "equivalents": {
+                "clientPaidAmount": "1725.00",
+                "platformFee": "86.25",
+                "withheldTaxAmount": "51.75",
+                "receivedAmount": "1587.00"
+            },
+            "conversionPending": false,
+            "charges": []
+        }
+    },
+    {
+        "step": "replay the correction",
+        "status": 200,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:9>",
+            "version": "2",
+            "projectId": "<id:5>",
+            "clientPaidAmount": "100.00",
+            "currency": "USD",
+            "exchangeRate": "17.25",
+            "paidOn": "2025-12-01",
+            "platformFee": "5.00",
+            "withheldTaxAmount": "3.00",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:5>",
+                "name": "Sitio web",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 2,
+                "acquisitionSource": "Upwork",
+                "deliveryStatus": "in_progress"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "92.00",
+            "equivalents": {
+                "clientPaidAmount": "1725.00",
+                "platformFee": "86.25",
+                "withheldTaxAmount": "51.75",
+                "receivedAmount": "1587.00"
+            },
+            "conversionPending": false,
+            "charges": []
+        }
+    },
+    {
+        "step": "correct with a stale version",
+        "status": 412,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "version_conflict",
+                "message": "El cobro cambió. Revisa los datos actuales antes de continuar."
+            }
+        }
+    },
+    {
+        "step": "change the amount of the first payment above the agreement",
+        "status": 422,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "validation_failed",
+                "message": "Indica por qué aumenta el excedente del proyecto.",
+                "fields": {
+                    "excessReason": "Indica por qué aumenta el excedente del proyecto."
+                }
+            }
+        }
+    },
+    {
+        "step": "record a payment to delete",
+        "status": 201,
+        "cacheControl": "no-store, private",
+        "body": {
+            "id": "<id:12>",
+            "version": "1",
+            "projectId": "<id:5>",
+            "clientPaidAmount": "200.00",
+            "currency": "MXN",
+            "exchangeRate": null,
+            "paidOn": "2025-12-05",
+            "platformFee": "0.00",
+            "withheldTaxAmount": "0.00",
+            "sourceType": "direct_client",
+            "sourceName": null,
+            "excessReason": null,
+            "project": {
+                "id": "<id:5>",
+                "name": "Sitio web",
+                "clientId": "<id:3>",
+                "agreedAmount": "5000.00",
+                "agreedCurrency": "MXN",
+                "agreedPaymentCount": 2,
+                "acquisitionSource": "Upwork",
+                "deliveryStatus": "in_progress"
+            },
+            "client": {
+                "id": "<id:3>",
+                "name": "Estudio Norte S.A."
+            },
+            "receivedAmount": "200.00",
+            "equivalents": {
+                "clientPaidAmount": "200.00",
+                "platformFee": "0.00",
+                "withheldTaxAmount": "0.00",
+                "receivedAmount": "200.00"
+            },
+            "conversionPending": false,
+            "charges": [],
+            "projectedClientPaidTotal": "1925.00",
+            "excessAmount": "0.00",
+            "projectedOutstandingBalance": "3075.00",
+            "requiresExcessReason": false
+        }
+    },
+    {
+        "step": "delete with a stale version",
+        "status": 412,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "version_conflict",
+                "message": "El cobro cambió. Revisa los datos actuales antes de continuar."
+            }
+        }
+    },
+    {
+        "step": "delete the payment",
+        "status": 204,
+        "cacheControl": "no-store, private",
+        "body": null
+    },
+    {
+        "step": "get the deleted payment",
+        "status": 404,
+        "cacheControl": "no-store, private",
+        "body": {
+            "error": {
+                "code": "not_found",
+                "message": "Recurso no disponible"
+            }
+        }
+    }
+]

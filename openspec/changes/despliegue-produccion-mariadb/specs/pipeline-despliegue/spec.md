@@ -73,8 +73,9 @@ activarse.
 - **THEN** el release anterior sigue activo, el respaldo existe y el pipeline reporta el fallo
 
 ### Requirement: Comprobación y reversión
-Tras activar, el pipeline MUST consultar un punto de salud público y, si no responde de forma
-correcta, MUST restaurar el enlace al release anterior.
+Tras activar, el despliegue MUST consultar el punto de salud desde el propio servidor, sin pasar
+por el proxy público, y, si no responde de forma correcta, MUST restaurar el enlace al release
+anterior y reportar el fallo al pipeline.
 
 #### Scenario: Salud fallida
 - **WHEN** la comprobación falla tras la activación

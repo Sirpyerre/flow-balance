@@ -27,6 +27,9 @@ servidor, no al revés, y publicarla con un pipeline que suba únicamente lo nec
   `frontend/src/`.
 - Secretos de la aplicación (`APP_SECRET`, contraseña de base de datos) viven solo en el
   servidor. GitHub guarda únicamente las credenciales de despliegue.
+- Cloudflare delante del origen: reutilizar el certificado de origen comodín y la configuración
+  de IP real que ya usa el blog, modo Full (strict), caché omitida salvo `/_astro/*`, y comprobar
+  la salud desde el servidor y no desde el runner.
 - Script de verificación de solo lectura que se corre por SSH antes del primer despliegue.
 
 - Agregar `GET /api/health` (sin sesión, sin caché) para comprobar el despliegue. Es la única

@@ -191,7 +191,20 @@ if have nginx; then
     printf '  Directivas "fastcgi_cache <zona>;" en toda la configuración: %s\n' "$http_cache"
     printf '%s\n' "$dump" | grep -E '^[[:space:]]*fastcgi_cache_path' | sed 's/^[[:space:]]*/  /' | cut -c1-110
     printf '%s\n' "$dump" | grep -qiE 'server_name[^;]*flow' && warn "Ya hay un server_name con 'flow': revisar que no choque" || pend "vhost de Flow Balance (se crea con deploy/nginx/flow-balance.conf)"
-    warn "Revisar manualmente que 'fastcgi_cache' NO esté a nivel http{} (heredaría al vhost de Flow)"
+    if [ "$http_cache" -gt 0 ]; then
+      warn "Hay ${http_cache} directivas fastcgi_cache; confirme que ninguna está a nivel http{} (heredaría al vhost de Flow)"
+    else
+      ok "Ninguna directiva 'fastcgi_cache <zona>;' detectada en la configuración"
+    fi
+    printf '%s\n' "$dump" | grep -qE '^[[:space:]]*real_ip_header[[:space:]]+CF-Connecting-IP' \
+      && ok "real_ip_header CF-Connecting-IP configurado (IP real tras Cloudflare)" \
+      || warn "Sin real_ip_header CF-Connecting-IP: el limitador de login vería la IP de Cloudflare"
+    cert=$(printf '%s\n' "$dump" | grep -E '^[[:space:]]*ssl_certificate[[:space:]]' | awk '{print $2}' | tr -d ';' | grep -v snakeoil | head -n1)
+    if [ -n "$cert" ] && priv openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null | grep -q '\*\.'; then
+      ok "Certificado ${cert} con comodín (cubre subdominios)"
+    else
+      warn "No se detectó un certificado comodín; el subdominio necesitará el suyo"
+    fi
   else
     skip "nginx -T requiere privilegios. Ejecute: sudo nginx -T | grep -n fastcgi_cache"
   fi
@@ -234,6 +247,8 @@ if [ -n "$mbin" ] && priv "$mbin" -NBe 'SELECT 1' >/dev/null; then
   [ "${used:-0}" -ge $((maxc - 4)) ] && warn "Conexiones al límite: dos más de Flow pueden comprimir al blog" || ok "Margen de conexiones para 2 de Flow Balance"
   printf '  charset=%s collation=%s innodb_buffer_pool=%s MB\n' "$(q 'SELECT @@character_set_server')" "$(q 'SELECT @@collation_server')" "$(q 'SELECT ROUND(@@innodb_buffer_pool_size/1048576)')"
   printf '  sql_mode: %s\n' "$(q 'SELECT @@GLOBAL.sql_mode')"
+  # Informativo: la app convierte zonas horarias en PHP (D22), no depende de estas tablas.
+  printf '  tablas de zonas horarias cargadas: %s nombres\n' "$(q 'SELECT COUNT(*) FROM mysql.time_zone_name')"
   printf '  log_bin=%s log_bin_trust_function_creators=%s\n' "$(q 'SELECT @@log_bin')" "$(q 'SELECT @@log_bin_trust_function_creators')"
   if [ "$(q "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${APP_DB}'")" = "1" ]; then ok "Base ${APP_DB} ya existe"; else pend "Base ${APP_DB} (se crea con el aprovisionamiento manual)"; fi
   if [ "$(q "SELECT COUNT(*) FROM mysql.user WHERE User='${APP_DB_USER}'")" -ge 1 ] 2>/dev/null; then ok "Usuario ${APP_DB_USER} ya existe"; else pend "Usuario ${APP_DB_USER}@localhost"; fi
@@ -265,7 +280,11 @@ have mariadb-dump || have mysqldump && ok "mariadb-dump/mysqldump disponible (re
 
 head1 "Seguridad básica"
 if have ufw; then
-  st=$(priv ufw status 2>/dev/null | head -n1); [ -n "$st" ] && printf '  ufw: %s\n' "$st" || skip "ufw requiere privilegios"
+  if out=$(priv ufw status verbose 2>/dev/null) && [ -n "$out" ]; then
+    printf '%s\n' "$out" | grep -E '^(Status|Default)|ALLOW' | sed 's/^/  ufw: /'
+  else
+    skip "ufw requiere privilegios"
+  fi
 fi
 ss -ltn 2>/dev/null | awk 'NR>1 {print $4}' | grep -vE '^(127\.|\[::1\]|::1)' | sed 's/^/  escucha pública: /' | sort -u
 printf '  nota: revise la lista anterior; solo deben aparecer 22, 80 y 443\n'

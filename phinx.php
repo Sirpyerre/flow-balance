@@ -20,7 +20,9 @@ return [
         'default_migration_table' => 'phinxlog',
         'default_environment' => $config->environment,
         $config->environment => [
-            'adapter' => 'pgsql',
+            'adapter' => 'mysql',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
             'connection' => $config->connect(),
             'name' => $config->database,
         ],

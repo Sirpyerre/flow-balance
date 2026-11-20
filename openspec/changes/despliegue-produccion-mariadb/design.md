@@ -93,18 +93,26 @@ añade complejidad para un camino que nunca se recorrerá.
 | PostgreSQL | MariaDB | Nota |
 |---|---|---|
 | `bigint GENERATED ... IDENTITY` | `BIGINT AUTO_INCREMENT` | Se castea a texto al leer para mantener ids como texto en la API |
-| `numeric` + `scale()<=2`, `<1e14` | `DECIMAL(16,2)` | El `CHECK` de escala sobra; se conserva el de rango |
-| `numeric` tipo de cambio, escala 6 | `DECIMAL(20,6)` | |
+| `numeric` + `scale()<=2`, `<1e14` (`agreed_amount`, `platform_fee`, `withheld_tax_amount`, `payment_charges.amount`) | `DECIMAL(22,8)` + `CHECK (x = ROUND(x, 2))` y el de rango | MariaDB redondea en silencio los decimales sobrantes de una columna `DECIMAL`, también en modo estricto (medido: `1.001` en `DECIMAL(16,2)` se guarda como `1.00`, solo con un aviso); una columna más ancha con ese `CHECK` los rechaza |
+| `numeric(20,6)` (`payments.client_paid_amount`) | `DECIMAL(20,6)` | Igual que en PostgreSQL, que también redondeaba |
+| `numeric` tipo de cambio, `scale()<=6` | `DECIMAL(26,12)` + `CHECK (x = ROUND(x, 6))` y el de rango | Rechaza de 7 a 12 decimales; solo un valor con ceros del decimal 7 al 12 y algo después del 13 se redondearía sin error, y la validación de PHP lo cubre |
+| `numeric` de `project_agreement_revisions` | `DECIMAL(22,8)` | Sin comprobación de escala, como en PostgreSQL |
 | `timestamptz` | `DATETIME(6)` en UTC | `TIMESTAMP` descartado: límite 2038 |
 | `jsonb` (payload de sesión) | `JSON` (alias de `LONGTEXT` con `JSON_VALID`) | Solo se lee y escribe completo |
 | `timestamptz[]` (`login_throttles.failed_at`) | `JSON NOT NULL DEFAULT '[]'` con segundos epoch enteros | Ver D21 |
 | `text` | `VARCHAR(n)` o `TEXT` según uso | |
 
-### D3. Colación: insensible para texto de usuario, binaria para claves
+### D3. Colación: insensible para texto de usuario, exacta para claves y valores discretos
 
-El servidor usa `utf8mb4_unicode_ci`. Es adecuada para nombres y correo, pero
-**las claves de idempotencia, `token_hash` y `key_hash` MUST ser `utf8mb4_bin`**: con una colación
-insensible, `ABC` y `abc` colisionarían y romperían la idempotencia y el hash de sesión.
+El servidor usa `utf8mb4_unicode_ci`: sirve para nombres, pero medido sobre un `UNIQUE` hace colisionar
+mayúsculas (`ABC`/`abc`), acentos (`nandu`/`ñandú`) y espacios finales (`k`/`k␠`); PostgreSQL no hacía
+ninguna de las tres cosas. Ni siquiera `utf8mb4_bin` basta: es `PAD SPACE` y sigue igualando `k` con
+`k␠`. Las columnas que identifican o comparan valores exactos MUST ser `utf8mb4_nopad_bin`:
+`email_normalized`, `token_hash`, `key_hash`, `idempotency_key`, `request_key`, `request_fingerprint`,
+`fingerprint`, `currency`, `agreed_currency`, `charge_type`, `source_type`, `action` y `delivery_status`
+(las cinco últimas, para que `CHECK (x IN (...))` distinga mayúsculas, como en PostgreSQL).
+Por la misma razón `PAD SPACE`, `name = btrim(name)` no se traduce a `name = TRIM(name)` (siempre
+verdadero con espacios finales); se escribe `CHAR_LENGTH(name) = CHAR_LENGTH(TRIM(name))`.
 
 ### D4. La normalización del correo vive en PHP
 
@@ -113,7 +121,7 @@ insensible, `ABC` y `abc` colisionarían y romperían la idempotencia y el hash 
 frágil y difícil de probar. La normalización se mueve a un único método de PHP, usado por registro y
 por inicio de sesión: recorta ese mismo conjunto (espacio, tab, LF, CR, FF, VT) y pasa a minúsculas
 con `mb_strtolower`. `RegisterUser` inserta el valor ya normalizado en una columna normal con
-`UNIQUE`, y `LoginUser` deja de consultarlo a la base. Una prueba de paridad fija el resultado con
+`UNIQUE` y colación `utf8mb4_nopad_bin` (D3), y `LoginUser` deja de consultarlo a la base. Una prueba de paridad fija el resultado con
 mayúsculas, espacios, tabuladores y letras acentuadas. *Alternativa descartada:* columna generada;
 obliga a mantener dos implementaciones del mismo criterio.
 
@@ -316,6 +324,19 @@ lo convierte en el 503 genérico (`config/routes.php:44-48`).
 La fila de `CAST ... numeric` es una trampa: en MariaDB `DECIMAL` sin parámetros es `DECIMAL(10,0)` y
 truncaría los importes sin avisar. La precisión se fija en cada `CAST`, dimensionada para que
 `importe × tasa` quepa (`DECIMAL(36,8)`); las fronteras de `PaymentRoundingTest` lo comprueban.
+
+### D25. Las pruebas de migración tienen su propia base
+
+`IncomeMigrationTest` crea hoy un esquema de PostgreSQL por ejecución (`PostgresAdapter(['schema' => ...])` y
+`SET LOCAL search_path`, `IncomeMigrationTest.php:11-25`) y lo descarta con la transacción. En MariaDB un
+esquema es una base de datos y el DDL confirma de forma implícita, así que ni ese aislamiento ni ese
+`ROLLBACK` son posibles. Se provisiona una tercera base, `flow_balance_migration_test`, con su usuario
+`flow_balance_migration_test_app` y solo para esa prueba: ejecuta la cadena de migraciones sobre una base
+vacía y la deja vacía al terminar. `DatabaseConfig` gana el entorno `migration-testing`, con prefijo
+`MIGRATION_TEST_DB_` y la misma protección que `testing` (nombre de base y de usuario fijos), para que nada
+más pueda apuntar ahí por error.
+*Alternativa descartada:* ejecutarla en `flow_balance_test` y limpiar las tablas al terminar; las
+migraciones usan nombres fijos (`users`, `payments`...) y chocarían con las demás pruebas si corren juntas.
 
 ## Risks / Trade-offs
 

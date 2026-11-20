@@ -10,35 +10,35 @@ final class CreateAuthenticationState extends AbstractMigration
     {
         $this->execute(<<<'SQL'
             CREATE TABLE server_sessions (
-                token_hash char(64) PRIMARY KEY,
-                user_id bigint REFERENCES users(id) ON DELETE RESTRICT,
-                payload jsonb NOT NULL,
-                created_at timestamptz NOT NULL,
-                authenticated_at timestamptz,
-                last_activity_at timestamptz NOT NULL,
-                expires_at timestamptz NOT NULL,
-                revoked_at timestamptz
-            )
+                token_hash CHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_nopad_bin NOT NULL PRIMARY KEY,
+                user_id BIGINT NULL,
+                payload JSON NOT NULL,
+                created_at DATETIME(6) NOT NULL,
+                authenticated_at DATETIME(6) NULL,
+                last_activity_at DATETIME(6) NOT NULL,
+                expires_at DATETIME(6) NOT NULL,
+                revoked_at DATETIME(6) NULL,
+                INDEX server_sessions_user_id_index (user_id),
+                INDEX server_sessions_expires_at_index (expires_at),
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             SQL);
+        // failed_at holds a JSON array of epoch seconds: MariaDB has no arrays (design D21).
         $this->execute(<<<'SQL'
             CREATE TABLE login_throttles (
-                key_hash char(64) PRIMARY KEY,
-                failed_at timestamptz[] NOT NULL DEFAULT '{}',
-                blocked_until timestamptz,
-                updated_at timestamptz NOT NULL
-            )
+                key_hash CHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_nopad_bin NOT NULL PRIMARY KEY,
+                failed_at JSON NOT NULL DEFAULT '[]',
+                blocked_until DATETIME(6) NULL,
+                updated_at DATETIME(6) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             SQL);
-        $this->execute('CREATE INDEX server_sessions_user_id_index ON server_sessions(user_id)');
-        $this->execute('CREATE INDEX server_sessions_expires_at_index ON server_sessions(expires_at)');
     }
 
     public function down(): void
     {
-        $this->execute('LOCK TABLE server_sessions IN ACCESS EXCLUSIVE MODE');
         if ($this->fetchRow('SELECT 1 FROM server_sessions LIMIT 1')) {
             throw new RuntimeException('Preserve the rows in server_sessions before rolling back');
         }
-        $this->execute('LOCK TABLE login_throttles IN ACCESS EXCLUSIVE MODE');
         if ($this->fetchRow('SELECT 1 FROM login_throttles LIMIT 1')) {
             throw new RuntimeException('Preserve the rows in login_throttles before rolling back');
         }

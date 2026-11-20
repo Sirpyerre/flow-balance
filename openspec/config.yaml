@@ -39,6 +39,8 @@ operations:
     guidance:
       - Ejecutar `herd npm run build` en `frontend/` y las pruebas de Playwright afectadas después de cada grupo de tareas.
       - Escribir pruebas contra una base de datos independiente de la de desarrollo.
+      - Ejecutar PHP, Composer y PHPUnit con `herd php` y `herd composer` (por ejemplo `herd php vendor/bin/phpunit`); el `php` suelto usa el 8.4 global y producción corre PHP 8.3.
+      - Exportar `TEST_DB_*`, `MIGRATION_TEST_DB_*` y `TEST_APP_SECRET` desde `.env` antes de PHPUnit; sin ellas las pruebas de integración se saltan en silencio y un "verde" no prueba nada de SQL.
   archive:
     guidance:
       - Resumir el resultado y los pendientes físicos (PWA en teléfono, zoom al 200 %) antes de cerrar.

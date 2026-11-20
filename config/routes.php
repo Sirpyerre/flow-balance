@@ -19,6 +19,8 @@ use FlowBalance\Identity\Http\RegistrationHandler;
 use FlowBalance\Identity\Infrastructure\NativePasswordHasher;
 use FlowBalance\Identity\Infrastructure\PostgresSessionPersistence;
 use FlowBalance\Shared\Clock\SystemClock;
+use FlowBalance\Shared\Configuration\AppSettings;
+use FlowBalance\Shared\Configuration\InvalidConfiguration;
 use FlowBalance\Shared\Database\UnitOfWork;
 use FlowBalance\Shared\Http\ClientIpResolver;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -30,8 +32,10 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 return static function (Application $app): void {
-    $transaction = static function (ServerRequestInterface $request, RequestHandlerInterface $handler) {
+    $settings = static fn (): AppSettings => require __DIR__ . '/settings.php';
+    $transaction = static function (ServerRequestInterface $request, RequestHandlerInterface $handler) use ($settings) {
         try {
+            $settings();
             $config = require __DIR__ . '/database.php';
             $database = $config->connect();
             $clock = new SystemClock();
@@ -41,6 +45,11 @@ return static function (Application $app): void {
                 $request->withAttribute(PDO::class, $database)->withAttribute(UnitOfWork::class, $work),
                 $handler,
             ));
+        } catch (InvalidConfiguration $error) {
+            error_log('Flow Balance configuration failure: ' . $error->getMessage());
+            return new JsonResponse(['error' => [
+                'code' => 'configuration_unavailable', 'message' => 'Intenta de nuevo más tarde',
+            ]], 503);
         } catch (PDOException $error) {
             error_log('Flow Balance database failure: ' . $error->getCode());
             return new JsonResponse(['error' => [
@@ -54,8 +63,8 @@ return static function (Application $app): void {
         return new JsonResponse(['csrfToken' => $guard->generateToken()]);
     }]);
 
-    $app->post('/api/auth/register', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
-        $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+    $app->post('/api/auth/register', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($settings) {
+        $origin = $settings()->origin;
         $service = new RegisterUser(
             $request->getAttribute(PDO::class),
             $request->getAttribute(UnitOfWork::class),
@@ -65,17 +74,16 @@ return static function (Application $app): void {
             $request, new RegistrationHandler($service, new SystemClock()),
         );
     }]);
-    $app->post('/api/auth/login', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
-        $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
-        $secretKey = (getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? 'development')) === 'testing' ? 'TEST_APP_SECRET' : 'APP_SECRET';
-        $secret = getenv($secretKey) ?: ($_ENV[$secretKey] ?? '');
-        if (strlen($secret) < 32) {
+    $app->post('/api/auth/login', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($settings) {
+        $current = $settings();
+        $secret = $current->secret();
+        if ($secret === null) {
             return new JsonResponse(['error' => ['code' => 'configuration_unavailable', 'message' => 'Intenta de nuevo más tarde']], 503);
         }
         $service = new LoginUser($request->getAttribute(PDO::class), new NativePasswordHasher(), $secret);
-        return (new AuthRequestMiddleware($origin))->process($request, new LoginHandler($service, new SystemClock(), new ClientIpResolver(
-                array_map('trim', explode(',', getenv('TRUSTED_API_PROXY_PEERS') ?: ($_ENV['TRUSTED_API_PROXY_PEERS'] ?? ''))),
-                getenv('CLIENT_IP_PROXY_TOKEN') ?: ($_ENV['CLIENT_IP_PROXY_TOKEN'] ?? ''),
+        return (new AuthRequestMiddleware($current->origin))->process($request, new LoginHandler($service, new SystemClock(), new ClientIpResolver(
+                $current->trustedProxyPeers,
+                $current->proxyToken,
             )));
     }]);
     $app->get('/api/auth/session', [$transaction, static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
@@ -123,8 +131,8 @@ return static function (Application $app): void {
         },
     ]);
     $app->post('/api/auth/logout', [$transaction, $private,
-        static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
-            $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+        static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($settings) {
+            $origin = $settings()->origin;
             return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new LogoutHandler());
         },
     ]);
@@ -141,14 +149,14 @@ return static function (Application $app): void {
         '/api/payments/{id}/charges' => 'charge',
     ] as $path => $operation) {
         $app->post($path, [$transaction, $private,
-            static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($operation) {
-                $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+            static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($operation, $settings) {
+                $origin = $settings()->origin;
                 return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new IncomeWriteHandler($operation));
             },
         ]);
     }
-    $correctPayment = static function (ServerRequestInterface $request, RequestHandlerInterface $next) {
-        $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+    $correctPayment = static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($settings) {
+        $origin = $settings()->origin;
         return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, new PaymentCorrectionHandler());
     };
     $app->post('/api/payments/{id}/preview', [$transaction, $private, $correctPayment], 'payments.preview-edit');
@@ -161,8 +169,8 @@ return static function (Application $app): void {
             continue;
         }
         $app->patch("/api/{$type}/{id}", [$transaction, $private,
-            static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($handler) {
-                $origin = getenv('APP_ORIGIN') ?: ($_ENV['APP_ORIGIN'] ?? 'https://flow-balance.test');
+            static function (ServerRequestInterface $request, RequestHandlerInterface $next) use ($handler, $settings) {
+                $origin = $settings()->origin;
                 return (new AuthRequestMiddleware($origin, requireAnonymous: false))->process($request, $handler);
             },
         ], "{$type}.patch");

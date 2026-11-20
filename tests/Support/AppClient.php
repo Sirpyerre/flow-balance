@@ -42,7 +42,7 @@ final class AppClient
         return $this->request($method, $path, $cookie, $data, $challenge['csrfToken'], $key, $version);
     }
 
-    /** @return array{0: int, 1: mixed, 2: string, 3: string} */
+    /** @return array{0: int, 1: mixed, 2: string, 3: string, 4: array<string, list<string>>} the last item holds every response header */
     public function request(string $method, string $path, string $cookie, ?array $data = null, string $csrf = '', string $key = '', string $version = '', array $headers = []): array
     {
         $body = new Stream('php://temp', 'wb+');
@@ -76,6 +76,6 @@ final class AppClient
         }
         $content = (string) $response->getBody();
         $result = str_starts_with($response->getHeaderLine('Content-Type'), 'text/csv') ? $content : json_decode($content, true);
-        return [$response->getStatusCode(), $result, $cookie, $response->getHeaderLine('Cache-Control')];
+        return [$response->getStatusCode(), $result, $cookie, $response->getHeaderLine('Cache-Control'), $response->getHeaders()];
     }
 }

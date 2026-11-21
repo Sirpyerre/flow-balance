@@ -65,6 +65,11 @@ jobs:
       - name: MariaDB 10.11 (compose.yaml)
         run: docker compose up -d --build --wait mariadb
 
+      # MariaDB arranca vacía: las pruebas de integración usan flow_balance_test, que en local ya está migrada.
+      # (flow_balance_migration_test se deja vacía a propósito: sus pruebas la migran por su cuenta.)
+      - name: Migrar la base de pruebas
+        run: composer db:migrate
+
       - name: PHPUnit
         run: vendor/bin/phpunit
 

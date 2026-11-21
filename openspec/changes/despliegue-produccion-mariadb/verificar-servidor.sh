@@ -14,7 +14,8 @@ export LC_ALL=C
 
 PHP_MIN="8.3"
 PHP_FPM_SVC="php8.3-fpm"
-APP_NAME="flowbalance"
+APP_NAME="flowbalance"      # pool, socket y directorio
+APP_USER="flowdeploy"       # usuario de sistema: ejecuta el pool y recibe despliegues y respaldos (D14)
 APP_DIR="/var/www/${APP_NAME}"
 APP_DB="flow_balance"
 APP_DB_USER="flow_balance_app"
@@ -153,7 +154,7 @@ if [ -d "$pools_dir" ]; then
     printf '  %s: pm=%s max_children=%s\n' "$(basename "$f")" "${pmode:-?}" "${mc:-?}"
     total_children=$((total_children + ${mc:-0}))
   done
-  if [ -e "$pools_dir/${APP_NAME}.conf" ]; then ok "Pool dedicado ${APP_NAME} ya existe"; else pend "Pool dedicado ${APP_NAME} (se crea con deploy/php-fpm/flowbalance.conf)"; fi
+  if [ -e "$pools_dir/${APP_NAME}.conf" ]; then ok "Pool dedicado ${APP_NAME} ya existe"; else pend "Pool dedicado ${APP_NAME} (lo instala deploy/ansible/flow-balance.yml)"; fi
   printf '  Suma de max_children existentes: %s\n' "$total_children"
 else
   warn "No se pudo leer ${pools_dir}"
@@ -167,7 +168,7 @@ if have nginx; then
   printf '%s' "$nv" | grep -q "http_ssl_module" && ok "Módulo http_ssl" || fail "Falta http_ssl_module"
   printf '%s' "$nv" | grep -q "http_v2_module"  && ok "Módulo http_v2" || warn "Sin http_v2"
   printf '%s' "$nv" | grep -q "http_v3_module"  && ok "HTTP/3 compilado" || printf '  nota: HTTP/3 no compilado (el diseño no lo usa)\n'
-  printf '%s' "$nv" | grep -qi "brotli"         && ok "Brotli compilado" || printf '  nota: Brotli no compilado (el diseño usa solo gzip)\n'
+  printf '  nota: los módulos dinámicos (como brotli) no aparecen en nginx -V; se comprueban en la configuración efectiva\n'
 else
   fail "nginx no está instalado o no está en PATH"
 fi
@@ -190,7 +191,11 @@ if have nginx; then
     http_cache=$(printf '%s\n' "$dump" | grep -cE '^[[:space:]]*fastcgi_cache[[:space:]]+[a-z_]+;')
     printf '  Directivas "fastcgi_cache <zona>;" en toda la configuración: %s\n' "$http_cache"
     printf '%s\n' "$dump" | grep -E '^[[:space:]]*fastcgi_cache_path' | sed 's/^[[:space:]]*/  /' | cut -c1-110
-    printf '%s\n' "$dump" | grep -qiE 'server_name[^;]*flow' && warn "Ya hay un server_name con 'flow': revisar que no choque" || pend "vhost de Flow Balance (se crea con deploy/nginx/flow-balance.conf)"
+    # Otro vhost (no el de Flow) con "flow" en su server_name podría chocar; el propio de Flow se comprueba más abajo.
+    other_flow=$(printf '%s\n' "$dump" | awk '/^# configuration file /{f=$4} f !~ /flow-balance\.conf:?$/ && tolower($0) ~ /server_name[^;]*flow/ {c++} END{print c+0}')
+    if [ "${other_flow:-0}" -gt 0 ]; then warn "Otro vhost tiene un server_name con 'flow': revisar que no choque con el de Flow Balance"; fi
+    printf '%s\n' "$dump" | grep -qE '^[[:space:]]*brotli[[:space:]]+on;' \
+      && ok "brotli activo a nivel http: el vhost de Flow lo hereda" || printf '  nota: brotli no está activo; el vhost de Flow comprime con gzip\n'
     if [ "$http_cache" -gt 0 ]; then
       warn "Hay ${http_cache} directivas fastcgi_cache; confirme que ninguna está a nivel http{} (heredaría al vhost de Flow)"
     else
@@ -213,7 +218,7 @@ fi
 for port in 80 443; do
   if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}$"; then ok "Puerto ${port} en escucha"; else warn "Puerto ${port} sin escucha"; fi
 done
-have certbot && ok "certbot instalado" || pend "certbot no encontrado (necesario para el certificado del subdominio)"
+have certbot && printf '  nota: certbot instalado (Flow no lo usa: el certificado es el comodín de origen de Cloudflare)\n' || ok "Sin certbot, como corresponde: el certificado es el comodín de origen de Cloudflare"
 
 # ---------------------------------------------------------------- MariaDB
 head1 "MariaDB"
@@ -237,6 +242,7 @@ esac
 
 if [ -n "$mbin" ] && priv "$mbin" -NBe 'SELECT 1' >/dev/null; then
   q() { priv "$mbin" -NBe "$1" 2>/dev/null; }
+  ok "Acceso administrativo a MariaDB (lo necesita el playbook de Flow Balance)"
   ver=$(q 'SELECT VERSION()')
   case "$ver" in
     10.11*|10.1[2-9]*|11.*) ok "Versión del servidor: ${ver}" ;;
@@ -250,38 +256,58 @@ if [ -n "$mbin" ] && priv "$mbin" -NBe 'SELECT 1' >/dev/null; then
   # Informativo: la app convierte zonas horarias en PHP (D22), no depende de estas tablas.
   printf '  tablas de zonas horarias cargadas: %s nombres\n' "$(q 'SELECT COUNT(*) FROM mysql.time_zone_name')"
   printf '  log_bin=%s log_bin_trust_function_creators=%s\n' "$(q 'SELECT @@log_bin')" "$(q 'SELECT @@log_bin_trust_function_creators')"
-  if [ "$(q "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${APP_DB}'")" = "1" ]; then ok "Base ${APP_DB} ya existe"; else pend "Base ${APP_DB} (se crea con el aprovisionamiento manual)"; fi
+  if [ "$(q "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${APP_DB}'")" = "1" ]; then ok "Base ${APP_DB} ya existe"; else pend "Base ${APP_DB} (la crea deploy/ansible/flow-balance.yml)"; fi
   hosts=$(q "SELECT COUNT(*) FROM mysql.user WHERE User='${APP_DB_USER}' AND Host IN ('localhost','127.0.0.1')")
   if [ "${hosts:-0}" -ge 2 ] 2>/dev/null; then ok "Usuario ${APP_DB_USER} existe para localhost y 127.0.0.1";
   elif [ "${hosts:-0}" -eq 1 ] 2>/dev/null; then warn "Usuario ${APP_DB_USER} solo existe para uno de los anfitriones: cree también el otro (localhost y 127.0.0.1)";
   else pend "Usuario ${APP_DB_USER}@localhost y @127.0.0.1"; fi
+  # El "_" es comodín en GRANT: sin escapar (flow_balance) el privilegio también alcanzaría a otras bases como "flowXbalance".
+  grantee="CONCAT(CHAR(39), '${APP_DB_USER}', CHAR(39), '@%')"
+  db_escaped="CONCAT('${APP_DB%%_*}', CHAR(92), '_${APP_DB#*_}')"
+  unescaped=$(q "SELECT COUNT(*) FROM information_schema.SCHEMA_PRIVILEGES WHERE GRANTEE LIKE ${grantee} AND TABLE_SCHEMA='${APP_DB}'")
+  others=$(q "SELECT COUNT(*) FROM information_schema.SCHEMA_PRIVILEGES WHERE GRANTEE LIKE ${grantee} AND TABLE_SCHEMA NOT IN ('${APP_DB}', ${db_escaped})")
+  if [ "${unescaped:-0}" -gt 0 ] 2>/dev/null; then warn "El privilegio de ${APP_DB_USER} usa '${APP_DB}' sin escapar: en el GRANT escriba el nombre con \\_ (flow\\_balance)"; fi
+  if [ "${others:-0}" -gt 0 ] 2>/dev/null; then fail "${APP_DB_USER} tiene privilegios sobre otras bases además de ${APP_DB}"; fi
 else
   skip "Consultas a MariaDB requieren acceso administrador. Ejecute con un usuario con sudo: sudo mariadb -e \"SELECT VERSION(), @@max_connections;\""
 fi
 
 # ---------------------------------------------------------------- Aplicación
 head1 "Recursos de Flow Balance"
-id "$APP_NAME" >/dev/null 2>&1 && ok "Usuario de sistema ${APP_NAME} existe" || pend "Usuario de sistema ${APP_NAME}"
+if id "$APP_USER" >/dev/null 2>&1; then
+  ok "Usuario de sistema ${APP_USER} existe"
+  shell=$(getent passwd "$APP_USER" | cut -d: -f7)
+  case "$shell" in */nologin|*/false) fail "${APP_USER} tiene shell '${shell}': el pipeline y el respaldo local no podrían entrar por SSH" ;; *) ok "${APP_USER} con shell ${shell}" ;; esac
+  groups_of=$(id -nG "$APP_USER")
+  case " ${groups_of} " in *" sudo "*|*" admin "*|*" wheel "*) fail "${APP_USER} pertenece a un grupo con sudo (${groups_of})" ;; *) ok "${APP_USER} sin sudo" ;; esac
+  case " ${groups_of} " in *" www-data "*) fail "${APP_USER} pertenece a www-data (el grupo del blog)" ;; *) ok "${APP_USER} fuera del grupo del blog" ;; esac
+else
+  pend "Usuario de sistema ${APP_USER} (lo crea deploy/ansible/flow-balance.yml)"
+fi
 if [ -d "$APP_DIR" ]; then
   ok "${APP_DIR} existe"
   for d in releases shared; do [ -d "$APP_DIR/$d" ] && ok "${APP_DIR}/${d}" || pend "${APP_DIR}/${d}"; done
   if [ -e "$APP_DIR/shared/.env" ]; then
     perm=$(stat -c '%a %U' "$APP_DIR/shared/.env" 2>/dev/null)
     case "$perm" in
-      "600 ${APP_NAME}") ok "shared/.env con modo 600 y dueño ${APP_NAME}" ;;
-      *) fail "shared/.env con permisos '${perm}' (debe ser 600 ${APP_NAME})" ;;
+      "600 ${APP_USER}") ok "shared/.env con modo 600 y dueño ${APP_USER}" ;;
+      *) fail "shared/.env con permisos '${perm}' (debe ser 600 ${APP_USER})" ;;
     esac
   else
-    pend "shared/.env (se crea a mano; nunca se sube desde GitHub)"
+    pend "shared/.env (lo genera el servidor con deploy/ansible/flow-balance.yml; nunca se sube desde GitHub)"
   fi
 else
   pend "Directorio ${APP_DIR}"
 fi
 have rsync && ok "rsync disponible (lo usa el pipeline)" || fail "rsync no instalado (el pipeline lo necesita en el servidor)"
 have gzip && ok "gzip disponible" || warn "gzip no encontrado (respaldos)"
+have flock && ok "flock disponible (candado de despliegue de release.sh)" || fail "flock no instalado (release.sh lo necesita)"
+have curl && ok "curl disponible (comprobación de salud de release.sh)" || fail "curl no instalado (release.sh lo necesita)"
+have php && ok "php CLI disponible (migraciones con phinx): $(php -r 'echo PHP_VERSION;')" || fail "php CLI no instalado (release.sh migra con phinx)"
 have mariadb-dump || have mysqldump && ok "mariadb-dump/mysqldump disponible (respaldos)" || fail "Falta mariadb-dump o mysqldump"
 
 head1 "Piezas de despliegue (deploy/)"
+[ -x /usr/local/bin/flowbalance-dump ] && ok "Herramienta de volcado instalada (/usr/local/bin/flowbalance-dump)" || pend "/usr/local/bin/flowbalance-dump (la instala el playbook)"
 [ -e /etc/nginx/snippets/flow-balance-security.conf ] && ok "Snippet de seguridad de Nginx instalado" || pend "/etc/nginx/snippets/flow-balance-security.conf"
 [ -e /etc/nginx/sites-enabled/flow-balance.conf ] && ok "vhost flow-balance.conf habilitado" || pend "vhost /etc/nginx/sites-enabled/flow-balance.conf"
 [ -S /run/php/flowbalance.sock ] && ok "Socket del pool flowbalance activo" || pend "Socket /run/php/flowbalance.sock (aparece al recargar PHP-FPM con el pool instalado)"

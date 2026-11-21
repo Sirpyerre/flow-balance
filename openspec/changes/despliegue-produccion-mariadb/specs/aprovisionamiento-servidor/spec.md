@@ -25,8 +25,16 @@ actualizar paquetes ni reiniciar servicios, y una segunda ejecución MUST NOT ca
 - **THEN** el playbook retira lo instalado, no recarga nada, falla y el blog sigue sirviendo
 
 #### Scenario: Requisitos ausentes
-- **WHEN** falta el certificado de origen, el nombre de host o el acceso administrativo a MariaDB
+- **WHEN** falta el certificado de origen, el nombre de host, el acceso administrativo a MariaDB, o la configuración de Nginx no es válida o no hereda el `real_ip` del blog
 - **THEN** el playbook aborta antes de modificar nada e indica qué falta
+
+#### Scenario: Privilegios ajenos
+- **WHEN** el usuario de MariaDB de Flow Balance ya tiene privilegios fuera de su base
+- **THEN** el playbook se detiene sin revocarlos ni modificar nada de la base y lo informa
+
+#### Scenario: Privilegio acotado
+- **WHEN** el playbook concede los privilegios del usuario de MariaDB
+- **THEN** el nombre de la base se escribe con el guion bajo escapado, de modo que no alcanza a otras bases de nombre parecido
 
 ### Requirement: Secretos generados y conservados en el servidor
 `APP_SECRET` y `DB_PASSWORD` MUST generarse en el servidor, escribirse solo en `shared/.env` con modo
@@ -74,11 +82,18 @@ completo, tamaño mínimo y las tablas esperadas) y MUST descartarse si alguna c
 
 ### Requirement: Restauración comprobable
 El proyecto MUST incluir un procedimiento que restaure el último respaldo local en una base desechable,
-compare su contenido con el de la base de origen y la elimine al terminar.
+compruebe que se restauran sin errores las tablas y restricciones del esquema, permita compararlo tabla
+por tabla con una base local indicada por el operador y elimine la base desechable al terminar. La base
+de producción no es accesible desde el equipo del operador, por lo que sin base de comparación se
+comprueba el esquema esperado y se informan las filas de cada tabla.
 
 #### Scenario: Restauración fiel
 - **WHEN** se restaura un respaldo válido
-- **THEN** las tablas, sus filas y las sumas de importes coinciden con la base de origen
+- **THEN** se restauran todas las tablas y restricciones del respaldo y, si se indicó una base de comparación, el contenido de cada tabla coincide con ella
+
+#### Scenario: Diferencia con la base de comparación
+- **WHEN** la base restaurada difiere en algún dato de la base de comparación
+- **THEN** el procedimiento informa la tabla distinta y termina con error
 
 #### Scenario: Respaldo truncado
 - **WHEN** el respaldo está truncado

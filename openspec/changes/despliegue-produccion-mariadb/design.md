@@ -262,6 +262,14 @@ verificación de plataforma del lock, `astro build`) y `deploy.yml` (manual o tr
 filtra por descuido), falla si aparece una ruta prohibida, sube con `rsync` sobre SSH con huella
 fijada, respalda con `mariadb-dump --single-transaction`, migra, activa, consulta la salud desde el propio servidor (D20) y
 revierte si falla.
+La lógica contra el servidor vive en scripts versionados que también se ensayan a mano: `deploy/package.sh` (lista blanca,
+permisos uniformes), `deploy/push.sh` (verifica la huella con una conexión previa, sube con `rsync` y ejecuta) y
+`deploy/release.sh` (se envía por stdin, así que nunca queda instalado ni desactualizado en el servidor y no hace falta
+agregarlo a la lista blanca). Retención: se conserva el release activo y los 3 más recientes, nunca el activo, porque un
+release fallido no activado no debe desplazar al que sirve. Un candado (`flock`) impide dos despliegues a la vez. La
+migración fallida o una salud fallida no revierten la base (el DDL no es transaccional): el código vuelve al release
+anterior y el respaldo previo queda disponible. Las acciones de GitHub se fijan por SHA de commit, no por etiqueta, porque
+`deploy.yml` maneja la llave SSH.
 
 ### D20. Cloudflare delante del origen
 
@@ -395,6 +403,16 @@ falla retira el enlace del vhost o el archivo del pool y aborta, para que el blo
 Una segunda ejecución MUST dar `changed=0` y funcionar con `--check`.
 La fuente de verdad de vhost, pool y `.env` de ejemplo son los archivos de `deploy/` ya ensayados; el
 playbook los lee y sustituye `@FLOW_HOST@`, sin copias.
+La base y los usuarios de MariaDB se configuran con el cliente `mariadb` y SQL por stdin (la contraseña no
+aparece en la lista de procesos), sin colecciones de Ansible: `community.mysql` está marcado como obsoleto y
+`ansible.mysql` anuncia que dejará de soportar MariaDB. «Cambió» se decide comparando una huella del estado
+(usuarios, hashes, privilegios) antes y después, y el SQL no se ejecuta en `--check`. El `GRANT` escapa el `_`
+del nombre (`` `flow\_balance` ``): sin escapar es un comodín y el privilegio alcanzaría a otras bases como
+`flowXbalance` (se comprobó). Si el usuario ya tiene privilegios de otra base, el playbook se detiene en lugar
+de revocarlos en silencio. La contraseña de la base debe ser alfanumérica (16 o más) para poder ir en el SQL sin
+escapes. `flowdeploy` lleva `*` como contraseña (no es válida, pero tampoco bloquea la cuenta como `!`, que
+algunas configuraciones de `sshd` rechazan). `flowbalance-dump` usa `--no-defaults`: un `~/.my.cnf` (el de root
+trae su contraseña de administrador) tiene prioridad sobre `MYSQL_PWD` y haría que el volcado use otra cuenta.
 Los secretos nunca pasan por la Mac ni por GitHub (no hace falta Ansible Vault): si `shared/.env` no
 existe, el servidor genera `APP_SECRET` y `DB_PASSWORD` con `openssl` y escribe el archivo en modo
 600; si existe, se lee `DB_PASSWORD` con `no_log` solo para comprobar que el usuario de MariaDB
@@ -486,5 +504,5 @@ ninguno de los casos.
 
 - Subdominio definitivo de Flow Balance. Solo bloquea el registro DNS y el valor de
   `APP_ORIGIN` del primer despliegue real, no el trabajo previo.
-- Si Playwright se ejecuta también en CI o solo localmente. No altera el diseño; se decide al
-  escribir `ci.yml`.
+- ~~Si Playwright se ejecuta también en CI o solo localmente.~~ Resuelto: solo localmente. Necesita navegadores y el sitio
+  y la API en marcha; `ci.yml` ejecuta PHPUnit y compila el frontend, que es lo que protege el despliegue.

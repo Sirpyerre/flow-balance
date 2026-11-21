@@ -1,9 +1,9 @@
 # Despliegue de Flow Balance en el VPS
 
-Flow Balance comparte servidor con el blog Drupal de monoforms.com (Ubuntu 24.04, 1 vCPU, 961 MB de RAM,
-Nginx 1.24, PHP 8.3 FPM y MariaDB 10.11). Vive aparte: su propio usuario, directorio, pool de PHP-FPM, vhost y base
-de datos. Este documento es el aprovisionamiento que se hace **una sola vez**; los despliegues siguientes los hace
-el pipeline.
+Flow Balance comparte servidor con el blog Drupal de monoforms.com (Ubuntu 24.04, 961 MB de RAM, Nginx 1.24, PHP 8.3 FPM
+y MariaDB 10.11). Vive aparte: su propio usuario, directorio, pool de PHP-FPM, vhost y base de datos. El
+aprovisionamiento se hace **una sola vez** con un playbook de Ansible propio de este proyecto; los despliegues
+siguientes los hace el pipeline.
 
 ```
  Navegador --HTTPS--> Cloudflare --HTTPS (Full strict)--> Nginx (vhost propio)
@@ -11,29 +11,42 @@ el pipeline.
                          /api/*                            |   todo lo demás
                            v                               v
               PHP-FPM, pool "flowbalance"        /var/www/flowbalance/current/frontend/dist  (estático)
+              (usuario flowdeploy)
               public/index.php (Mezzio)
                            |
                            v
                   MariaDB 127.0.0.1 (base flow_balance)
 ```
 
+> **No use el Ansible de monoforms para esto.** Reconstruye el servidor completo (actualiza paquetes, reinicia Nginx,
+> PHP-FPM y MariaDB, reescribe `nginx.conf` y `sshd_config`) y afectaría al blog. El playbook de esta carpeta solo toca
+> lo de Flow Balance.
+
 ## Qué hay en `deploy/`
 
-| Archivo | Se instala en |
+| Archivo | Para qué sirve |
 |---|---|
-| `nginx/flow-balance.conf.template` | `/etc/nginx/sites-available/flow-balance.conf` (con el host ya escrito) |
-| `nginx/flow-balance-security.conf` | `/etc/nginx/snippets/flow-balance-security.conf` |
-| `php-fpm/flowbalance.conf` | `/etc/php/8.3/fpm/pool.d/flowbalance.conf` |
-| `env.production.example` | `/var/www/flowbalance/shared/.env`, completado en el servidor |
+| `../.github/workflows/ci.yml`, `deploy.yml` | Pruebas, y construcción y despliegue a producción |
+| `ansible/flow-balance.yml` | El aprovisionamiento: usuario, directorios, base, `.env`, pool, vhost y herramienta de volcado |
+| `ansible/inventory.example.yml`, `ansible/ansible.cfg` | Inventario de ejemplo (host y usuario salen del entorno) y configuración que mantiene activa la verificación del host SSH |
+| `nginx/flow-balance.conf.template` | El vhost, con `@FLOW_HOST@` (lo sustituye el playbook) |
+| `nginx/flow-balance-security.conf` | Cabeceras de seguridad que incluye cada `location` |
+| `php-fpm/flowbalance.conf` | El pool de PHP-FPM |
+| `env.production.example` | Plantilla del `shared/.env` (sin valores reales) |
+| `bin/flowbalance-dump` | El volcado de la base, instalado en `/usr/local/bin` |
+| `backup-local.sh`, `restore-local.sh` | Respaldo y comprobación de restauración, desde su Mac |
+| `package.sh` | Arma el paquete desde una lista blanca y falla si aparece una ruta prohibida |
+| `push.sh` | Verifica la huella del servidor, sube el paquete y activa el release (lo usa el pipeline) |
+| `release.sh` | Respaldo, migración, activación atómica, salud y reversión; corre en el servidor, enviado por stdin |
 
 Disposición en el servidor (la que usan Nginx y los despliegues):
 
 ```
-/var/www/flowbalance/
-  releases/<fecha>-<sha>/   public/ src/ config/ db/migrations/ vendor/ frontend/dist/ .env -> ../../shared/.env
-  current -> releases/...   enlace al release activo
-  shared/.env               secretos, modo 600
-  shared/backups/           respaldos de la base, los 7 más recientes
+/var/www/flowbalance/                 flowdeploy, 755
+  releases/<fecha>-<sha>/             public/ src/ config/ db/migrations/ vendor/ frontend/dist/ .env -> ../../shared/.env
+  current -> releases/...             enlace al release activo
+  shared/.env                         secretos, modo 600
+  shared/backups/                     respaldos previos a cada migración, los 7 más recientes (modo 700)
 ```
 
 ## 0. Antes de empezar
@@ -44,80 +57,120 @@ Corra la verificación de solo lectura y resuelva las fallas (no modifica nada):
 ssh admin@host 'bash -s' < openspec/changes/despliegue-produccion-mariadb/verificar-servidor.sh
 ```
 
-Decida el nombre de host (en estos ejemplos `flow.monoforms.com`). Cámbielo en un solo lugar: el `sed` del paso 4 y
-`APP_ORIGIN` del paso 3.
+Decida el subdominio (en estos ejemplos `flow.monoforms.com`): es el único dato que necesita el playbook.
 
-## 1. Usuario de sistema y directorios
+## 1. Aprovisionamiento con Ansible
 
-El usuario de la aplicación no tiene sudo ni shell interactiva, y no es el del blog (`www-data`).
-
-```
-sudo useradd --system --create-home --home-dir /home/flowbalance --shell /usr/sbin/nologin flowbalance
-sudo install -d -o flowbalance -g flowbalance -m 755 /var/www/flowbalance /var/www/flowbalance/releases
-sudo install -d -o flowbalance -g flowbalance -m 750 /var/www/flowbalance/shared
-sudo install -d -o flowbalance -g flowbalance -m 700 /var/www/flowbalance/shared/backups
-```
-
-`shared` queda en 750: Nginx (`www-data`) llega a `current/frontend/dist` y a `current/public`, pero no a los secretos.
-
-## 2. Base de datos y usuario
-
-Un usuario con privilegios **solo** sobre `flow_balance` (nunca sobre `drupal`). Entre en el cliente y escriba la
-contraseña allí, no en la línea de comandos, para que no quede en el historial del shell. Se crean dos usuarios porque
-`localhost` y `127.0.0.1` son anfitriones distintos para MariaDB si el servidor resuelve nombres de forma estricta.
+Desde su Mac (probado con ansible-core 2.21; el servidor no necesita nada extra, solo Python 3 que Ubuntu ya trae).
 
 ```
-openssl rand -hex 24          # genere la contraseña y cópiela
+cd deploy/ansible
+export FLOW_VPS_HOST=<ip-o-dns-del-vps>
+export FLOW_VPS_USER=root                    # o su usuario administrador con sudo (sección 10)
+ssh "$FLOW_VPS_USER@$FLOW_VPS_HOST" true     # fija la huella del servidor; el playbook nunca la desactiva
+
+# 1) Ensayo: no modifica nada (la parte de MariaDB no se simula, solo se informa)
+ansible-playbook -i inventory.example.yml flow-balance.yml --check \
+  -e flow_host=flow.monoforms.com -e flow_admin_public_key_file=~/.ssh/id_ed25519.pub
+
+# 2) Aplicar
+ansible-playbook -i inventory.example.yml flow-balance.yml \
+  -e flow_host=flow.monoforms.com -e flow_admin_public_key_file=~/.ssh/id_ed25519.pub
+```
+
+| Variable | Para qué sirve |
+|---|---|
+| `flow_host` | **Obligatoria.** Subdominio en minúsculas, sin esquema ni barra |
+| `flow_admin_public_key_file` | Su llave pública: la que entra como `flowdeploy` para el respaldo local |
+| `flow_ci_public_key_file` | La llave pública del pipeline (tarea 9.5); se instala con la opción `restrict` |
+| `flow_allow_missing_real_ip=true` | Solo para servidores de prueba sin el `real_ip` del blog |
+
+**Antes de modificar nada (preflight)** el playbook aborta si: falta el subdominio o es inválido; las llaves traen
+opciones delante; faltan Nginx o PHP 8.3-FPM; falta el certificado de origen o su llave (así se confirma la ruta de
+`ssl_certificate_key`); `nginx -t` ya falla; la configuración no incluye `sites-enabled` ni el `real_ip_header
+CF-Connecting-IP` del blog; o no hay acceso administrativo a MariaDB (por socket o con `/root/.my.cnf`).
+
+**Qué hace** (y nada más): crea el usuario `flowdeploy` y los directorios; crea la base `flow_balance` y el usuario
+`flow_balance_app`; genera el `.env`; instala el pool, el vhost y `/usr/local/bin/flowbalance-dump`; valida con
+`nginx -t` y `php-fpm8.3 -t` y **solo recarga**. Si la validación falla, deja el servidor como estaba (restaura o
+retira lo instalado), no recarga nada y el blog sigue sirviendo.
+
+**Qué nunca toca:** `nginx.conf`, `php.ini`, el pool `www`, `sshd`, UFW, fail2ban, la base `drupal`; no actualiza
+paquetes ni reinicia servicios.
+
+**Es idempotente:** una segunda ejecución informa `changed=0`. Si alguien cambia a mano la herramienta de volcado, el
+vhost o el pool, volver a ejecutarlo los repara.
+
+Después de aplicarlo, repita la verificación de la sección 0: debe quedar sin fallas.
+
+## 2. Base de datos y usuarios
+
+El playbook crea `flow_balance` (utf8mb4) y el usuario `flow_balance_app` para `localhost` **y** `127.0.0.1` (son
+anfitriones distintos para MariaDB cuando resuelve nombres de forma estricta, como en este servidor) con privilegios
+solo sobre esa base. Si el usuario ya tiene privilegios de otra base, el playbook se detiene y lo avisa en lugar de
+revocarlos en silencio. El esquema no se crea aquí: lo migra el primer despliegue.
+
+**El `_` es un comodín en `GRANT`.** Con `ON flow_balance.*` el privilegio también alcanza a una base llamada
+`flowXbalance`; hay que escribirlo `ON \`flow\_balance\`.*`. El playbook lo hace así y `verificar-servidor.sh` avisa si
+lo encuentra sin escapar.
+
+Equivalente manual (la contraseña se escribe dentro del cliente, no en la línea de comandos):
+
+```
 sudo mariadb
 ```
 ```sql
 CREATE DATABASE flow_balance CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'flow_balance_app'@'localhost' IDENTIFIED BY '<contraseña>';
 CREATE USER 'flow_balance_app'@'127.0.0.1' IDENTIFIED BY '<contraseña>';
-GRANT ALL PRIVILEGES ON flow_balance.* TO 'flow_balance_app'@'localhost';
-GRANT ALL PRIVILEGES ON flow_balance.* TO 'flow_balance_app'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON `flow\_balance`.* TO 'flow_balance_app'@'localhost';
+GRANT ALL PRIVILEGES ON `flow\_balance`.* TO 'flow_balance_app'@'127.0.0.1';
 ```
-
-El esquema no se crea aquí: lo migra el primer despliegue.
 
 ## 3. Secretos de la aplicación
 
-Solo existen en el servidor; GitHub no los ve.
+Solo existen en el servidor; ni GitHub ni su Mac los ven. Si `shared/.env` no existe, el **servidor** genera
+`APP_SECRET` (64 caracteres) y `DB_PASSWORD` con `openssl`, escribe el archivo en modo 600 (dueño `flowdeploy`) y deja
+el usuario de MariaDB con esa contraseña. Si ya existe, **no se sobrescribe ni se rota**: el playbook solo lee
+`DB_PASSWORD` para comprobar que el usuario de MariaDB la tenga, y la alinea si alguien la cambió en la base. La salida
+del playbook no imprime ningún valor.
 
-```
-sudo install -m 600 -o flowbalance -g flowbalance deploy/env.production.example /var/www/flowbalance/shared/.env
-sudo -u flowbalance nano /var/www/flowbalance/shared/.env     # APP_ORIGIN, APP_SECRET y DB_PASSWORD
-```
+- `APP_ORIGIN` sale de `flow_host`. Si el `.env` ya existía con otro origen, el playbook avisa y no lo cambia.
+- `DB_PASSWORD` debe ser alfanumérica de 16 caracteres o más (la generada lo es); con otros caracteres el playbook se
+  detiene, sin imprimirla.
+- Con menos de 32 caracteres en `APP_SECRET` el inicio de sesión responde 503.
 
-`APP_SECRET`: `openssl rand -hex 32`. Con menos de 32 caracteres el inicio de sesión responde 503.
+Equivalente manual: `sudo install -m 600 -o flowdeploy -g flowdeploy deploy/env.production.example
+/var/www/flowbalance/shared/.env` y completar `APP_ORIGIN`, `APP_SECRET` (`openssl rand -hex 32`) y `DB_PASSWORD`.
 
 ## 4. PHP-FPM y Nginx
 
-Comparten el proceso maestro con el blog. Recargar es elegante (las peticiones en curso terminan), pero hágalo una
-vez y fuera de horas pico.
+Comparten el proceso maestro con el blog. El playbook valida y recarga (las peticiones en curso terminan), pero hágalo
+una vez y fuera de horas pico. Instala:
+
+- `/etc/php/8.3/fpm/pool.d/flowbalance.conf` (usuario `flowdeploy`, socket `/run/php/flowbalance.sock`).
+- `/etc/nginx/snippets/flow-balance-security.conf` y `/etc/nginx/sites-available/flow-balance.conf` (con el enlace en
+  `sites-enabled`).
+
+El certificado es el comodín de origen de Cloudflare (`*.monoforms.com`), vigente hasta 2041: no hace falta certbot ni
+ningún token de la API de Cloudflare en el servidor. El playbook comprueba que el par
+`/etc/nginx/ssl/cloudflare-origin.pem` y `.key` exista; si el blog usa otra ruta, corríjala en
+`deploy/nginx/flow-balance.conf.template`.
+
+El vhost **no** repite `set_real_ip_from` ni `real_ip_header`: los hereda de `monoforms.conf`, donde están a nivel
+`http`; el playbook se niega a continuar si no están. Brotli tampoco se repite: el blog lo activa a nivel `http`
+(`brotli on`) y el vhost lo hereda; el vhost solo declara gzip como respaldo.
+
+Equivalente manual:
 
 ```
 sudo install -m 644 deploy/php-fpm/flowbalance.conf /etc/php/8.3/fpm/pool.d/flowbalance.conf
 sudo php-fpm8.3 -t && sudo systemctl reload php8.3-fpm
-
 sudo install -m 644 deploy/nginx/flow-balance-security.conf /etc/nginx/snippets/flow-balance-security.conf
 sed 's/@FLOW_HOST@/flow.monoforms.com/g' deploy/nginx/flow-balance.conf.template | sudo tee /etc/nginx/sites-available/flow-balance.conf >/dev/null
 sudo ln -s /etc/nginx/sites-available/flow-balance.conf /etc/nginx/sites-enabled/flow-balance.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
-
-Antes del `nginx -t`, confirme que la llave del certificado es la que asume la plantilla:
-
-```
-grep -n ssl_certificate /etc/nginx/sites-enabled/monoforms.conf
-```
-
-Si `ssl_certificate_key` no es `/etc/nginx/ssl/cloudflare-origin.key`, corrija esa línea de la plantilla. El certificado
-es el comodín de origen de Cloudflare (`*.monoforms.com`), vigente hasta 2041, así que no hace falta certbot ni
-ningún token de la API de Cloudflare en el servidor.
-
-El vhost **no** repite `set_real_ip_from` ni `real_ip_header`: los hereda de `monoforms.conf`, donde están a nivel
-`http`. Si alguien los quita de ese archivo, el limitador de inicios de sesión empezaría a ver la IP de Cloudflare.
 
 ## 5. Cloudflare (lo hace usted en el panel)
 
@@ -153,22 +206,36 @@ sudo tail -1 /var/log/nginx/flow-balance.access.log
 
 ## 7. Respaldo y restauración
 
-El respaldo es de la base de Flow Balance solamente. Se ensayó el ciclo completo: las 10 tablas, su contenido, el
-esquema, las restricciones y el texto con emoji salieron idénticos.
+El respaldo es de la base de Flow Balance solamente, **manual y desde su Mac**. El volcado viaja comprimido por SSH
+directo a su disco: el servidor no guarda ninguna copia, así que no hay nada que borrar ni que llene su disco.
 
 ```
-# Respaldo. Con pipefail y comprobando el final: un respaldo vacío NO es un respaldo.
-set -o pipefail
-MYSQL_PWD='<contraseña>' mariadb-dump --single-transaction --quick --default-character-set=utf8mb4 \
-  -u flow_balance_app flow_balance | gzip -9 > /var/www/flowbalance/shared/backups/flow_balance-$(date +%F-%H%M).sql.gz
-zcat <archivo> | tail -1        # debe empezar por "-- Dump completed"
-
-# Restauración en una base temporal, para comprobarla sin tocar la real.
-sudo mariadb -e "CREATE DATABASE flow_balance_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-zcat <archivo> | sudo mariadb --default-character-set=utf8mb4 flow_balance_restore
-sudo mariadb -e "CHECKSUM TABLE flow_balance.users, flow_balance_restore.users"      # y las demás tablas
-sudo mariadb -e "DROP DATABASE flow_balance_restore"
+FLOW_BACKUP_HOST=flowdeploy@<host> deploy/backup-local.sh        # respalda en ~/Backups/flow-balance (modo 700)
+deploy/backup-local.sh --status                                  # ¿qué tan viejo es el último?
 ```
+
+Antes de aceptar el archivo lo verifica: tamaño mínimo, `gzip -t`, última línea `-- Dump completed` y al menos 10
+`CREATE TABLE`. Si algo falla (credenciales, volcado vacío o truncado, conexión cortada) no queda ningún archivo y el
+código de salida es distinto de cero. Avisa si el respaldo anterior tiene más de 7 días. Variables: `FLOW_BACKUP_DIR`,
+`FLOW_BACKUP_SSH_OPTS`, `FLOW_BACKUP_MIN_BYTES`, `FLOW_BACKUP_EXPECTED_TABLES`, `FLOW_BACKUP_STALE_DAYS`.
+
+**Un respaldo que nunca se restauró es una suposición.** Compruebe de vez en cuando que se restaura:
+
+```
+deploy/restore-local.sh                          # el último respaldo, en una base desechable de su MariaDB local
+deploy/restore-local.sh archivo.sql.gz --contra <base-local>    # además compara tabla por tabla (CHECKSUM TABLE)
+```
+
+Usa el servicio `mariadb` del `compose.yaml` y la `MARIADB_ROOT_PASSWORD` de su `.env`; la base desechable se elimina
+siempre. Sin `--contra` (el caso normal: la base de producción no es accesible desde su Mac) exige que se restauren
+sin errores las tablas y restricciones `CHECK` del esquema y muestra las filas de cada tabla.
+
+Los respaldos **previos a cada migración** los hace el pipeline en el servidor (`shared/backups`, los 7 más recientes)
+para poder revertir una migración fallida; son independientes de los de esta sección.
+
+Restaurar en producción (emergencia; sustituye los datos actuales): primero compruebe el archivo con
+`restore-local.sh`, y después `gzip -dc <archivo> | ssh <admin>@<host> 'sudo mariadb --default-character-set=utf8mb4 flow_balance'`.
+El volcado trae `DROP TABLE IF EXISTS` de cada tabla.
 
 ## 8. Reversión manual
 
@@ -185,6 +252,8 @@ Si el release nuevo aplicó migraciones, restaure también el respaldo previo a 
 
 | Síntoma | Dónde mirar |
 |---|---|
+| El playbook aborta en el preflight | El mensaje dice qué falta; no se modificó nada |
+| El playbook aborta con «`nginx -t` rechazó…» o «`php-fpm8.3 -t` rechazó…» | Ya restauró el estado anterior y no recargó; el mensaje trae el error de Nginx o PHP-FPM |
 | 502 en `/api/` | `systemctl status php8.3-fpm`; el socket `/run/php/flowbalance.sock` existe y es de `www-data:www-data` |
 | 503 `configuration_unavailable` | `APP_ORIGIN` o `APP_SECRET` inválidos en `shared/.env`; `/var/log/php8.3-fpm.log` nombra el ajuste, nunca su valor |
 | 503 `persistence_unavailable` | MariaDB activo, usuario y contraseña de `shared/.env`, `max_connections` |
@@ -194,6 +263,94 @@ Si el release nuevo aplicó migraciones, restaure también el respaldo previo a 
 
 ## 10. Acceso de administración (tarea 8.3)
 
-Cree su usuario sin root con sudo y llave, entre con él **en una segunda sesión** y solo entonces desactive el acceso
-de root y por contraseña (`PermitRootLogin no`, `PasswordAuthentication no` en `/etc/ssh/sshd_config.d/`). Si cierra la
-sesión actual antes de probar, puede quedarse fuera. Este usuario no es `flowbalance`, que no lleva sudo.
+Cree su usuario sin root, con sudo y llave, entre con él **en una segunda sesión** y solo entonces desactive el acceso
+de root. Si cierra la sesión actual antes de probar, puede quedarse fuera. Este usuario no es `flowdeploy`, que no lleva
+sudo.
+
+Dos particularidades de este servidor, que el Ansible de monoforms configura:
+
+- **`/etc/ssh/sshd_config.d/` se ignora:** su `sshd_config` no trae `Include`. Escriba `PermitRootLogin no` en
+  `/etc/ssh/sshd_config` y replíquelo en la plantilla `sshd_config.j2` de monoforms; si no, una nueva ejecución de ese
+  Ansible lo revierte (hoy está en `prohibit-password`; la contraseña ya está desactivada).
+- **Ese Ansible, Terraform y sus scripts entran como `root`** (`remote_user = root`). Cámbielo a su usuario nuevo antes
+  de cerrar root, o dejarán de funcionar.
+
+Luego use ese usuario como `FLOW_VPS_USER` en la sección 1 (el playbook necesita sudo, no root).
+
+## 11. Riesgos aceptados
+
+- **Un solo usuario (`flowdeploy`) ejecuta PHP y es dueño del código.** Si PHP se compromete, el atacante puede reescribir
+  el release y leer `shared/.env`. Lo acotan `open_basedir`, `disable_functions`, el pool de 2 procesos y que no es el
+  usuario del blog.
+- **Durabilidad:** MariaDB corre con `innodb_flush_log_at_trx_commit = 2` y `skip-log-bin` (configuración de monoforms,
+  global y no aislable por base). Una caída del sistema entero (no solo de MariaDB) puede perder hasta ~1 s de
+  transacciones confirmadas y no hay recuperación a un punto en el tiempo; el respaldo es lo único que protege.
+- **Respaldo manual:** depende de que usted lo ejecute. Un fallo del servidor entre dos respaldos pierde los cobros de ese
+  intervalo; `backup-local.sh --status` le dice cuánto hace del último.
+
+## 12. Pipeline de despliegue (GitHub Actions)
+
+```
+ push a main / manual
+        |
+   ci.yml (PHP 8.3 y 8.4 + MariaDB 10.11, Astro)  --falla-->  no se sube nada
+        |
+   build: composer --no-dev, astro build con APP_ORIGIN, package.sh (lista blanca)    [sin secretos]
+        |
+   deploy (entorno "production", con revisores): push.sh
+        |-- verifica la huella del servidor (si no coincide, aborta sin transferir)
+        |-- rsync del paquete a releases/<fecha>-<sha>/
+        '-- release.sh (por stdin, como flowdeploy): enlaza .env -> respalda y VERIFICA -> migra
+                       -> cambia "current" (mv -T) -> /api/health por loopback -> si falla, devuelve el enlace
+```
+
+Cada despliegue deja el release activo y los 3 más recientes, y los 7 respaldos previos a migración más recientes.
+
+**Configuración en GitHub** (Settings, una sola vez):
+
+1. *Environments > New environment > `production`*: *Required reviewers* (usted) y *Deployment branches: Selected
+   branches > `main`*. Los secretos y variables siguientes se crean **en ese entorno**, no en el repositorio.
+2. **Secreto** `DEPLOY_SSH_KEY`: la llave privada de despliegue (siguiente punto).
+3. **Variables** (no sensibles): `DEPLOY_HOST` (IP o DNS del VPS), `DEPLOY_USER` (`flowdeploy`), `APP_ORIGIN`
+   (`https://<subdominio>`, se compila dentro del sitio) y `DEPLOY_KNOWN_HOSTS` (la huella fijada del servidor).
+4. Los secretos de la aplicación (`APP_SECRET`, `DB_PASSWORD`) **no** se cargan en GitHub: viven solo en
+   `shared/.env`.
+
+**Llave de despliegue exclusiva** (distinta de su llave personal):
+
+```
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/flow_deploy -C github-actions-flow-balance
+# instalarla en el servidor con la opción `restrict` (sin pty, sin reenvíos): la pasa el playbook
+cd deploy/ansible && ansible-playbook -i inventory.example.yml flow-balance.yml \
+  -e flow_host=<subdominio> -e flow_admin_public_key_file=~/.ssh/id_ed25519.pub \
+  -e flow_ci_public_key_file=~/.ssh/flow_deploy.pub
+gh secret set DEPLOY_SSH_KEY --env production < ~/.ssh/flow_deploy      # o pegue el archivo en la interfaz
+rm -P ~/.ssh/flow_deploy                                                  # la privada ya no hace falta en su Mac
+```
+
+**Huella del servidor** (`DEPLOY_KNOWN_HOSTS`): obténgala por un canal de confianza, no desde el propio runner.
+
+```
+ssh-keyscan -t ed25519 <host> 2>/dev/null                 # la línea para la variable
+ssh-keygen -lf <(ssh-keyscan -t ed25519 <host> 2>/dev/null)   # compare esta huella con la del servidor:
+ssh <admin>@<host> 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
+```
+
+Si las dos huellas no coinciden, no despliegue: alguien está en medio.
+
+**Códigos de `release.sh`** (aparecen en el registro del trabajo): `10` precondición (falta el paquete, el `.env` o la
+herramienta de volcado), `20` el respaldo falló o quedó vacío (no se migró nada), `30` la migración falló (el enlace
+no se tocó), `40` la salud falló y se devolvió el enlace, `41` la salud falló y no se pudo devolver, `50` hay otro
+despliegue en curso.
+
+**Una migración que falla puede dejar el esquema a medias** (el DDL de MariaDB no es transaccional). `release.sh` no la
+revierte: deja el enlace anterior y el respaldo previo en `shared/backups`. Las migraciones del proyecto deben poder
+reintentarse. Lo mismo si la salud falla después de migrar: el código vuelve, la base conserva el esquema nuevo, por
+eso las migraciones deben ser compatibles con el release anterior.
+
+**Probar el pipeline a mano** (sin GitHub), con una llave y una huella:
+
+```
+DEPLOY_HOST=<host> DEPLOY_USER=flowdeploy DEPLOY_SSH_KEY_FILE=~/.ssh/flow_deploy \
+DEPLOY_KNOWN_HOSTS="$(grep <host> ~/.ssh/known_hosts)" deploy/push.sh build/package <release> <subdominio>
+```

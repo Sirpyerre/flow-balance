@@ -1,0 +1,519 @@
+---
+# Aprovisionamiento de Flow Balance en el VPS que ya aloja el blog Drupal (D28).
+#
+# Alcance: SOLO lo de Flow Balance (usuario y directorios, base y usuarios de MariaDB, shared/.env, pool de PHP-FPM,
+# vhost de Nginx y /usr/local/bin/flowbalance-dump). NO toca nginx.conf, php.ini, el pool www, sshd, UFW, fail2ban ni la
+# base del blog; no actualiza paquetes ni reinicia servicios (valida y solo recarga). Es idempotente: una segunda
+# ejecución no cambia nada. Funciona con --check.
+#
+# Uso, desde su equipo (ver deploy/README.md):
+#   FLOW_VPS_HOST=<ip-o-dns> ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/flow-balance.yml \
+#       -e flow_host=<subdominio> -e flow_admin_public_key_file=~/.ssh/id_ed25519.pub \
+#       [-e flow_ci_public_key_file=<llave-publica-del-pipeline>] [--check]
+#
+# Los secretos de la aplicación NO pasan por este equipo: si shared/.env no existe, el servidor genera APP_SECRET y
+# DB_PASSWORD; si existe, nunca se sobrescribe ni se rota.
+
+- name: Aprovisionar Flow Balance
+  hosts: flow_vps
+  become: true
+  gather_facts: true
+  gather_subset: ['!all', '!min', 'service_mgr']
+
+  vars:
+    flow_user: flowdeploy
+    flow_app_dir: /var/www/flowbalance
+    flow_db_name: flow_balance
+    flow_db_user: flow_balance_app
+    flow_php_version: "8.3"
+    flow_repo_root: "{{ playbook_dir }}/../.."
+    # Base de datos: se configura con el cliente `mariadb` y SQL por stdin (sin colecciones: community.mysql está
+    # obsoleto y ansible.mysql dejará de soportar MariaDB). El `_` del nombre es comodín en GRANT: se escapa para que el
+    # privilegio no alcance a otras bases como "flowXbalance". Aquí Jinja no interpreta las barras invertidas.
+    flow_db_grant_name: >-
+      {{ flow_db_name | replace('_', '\_') }}
+    flow_db_grant_literal: >-
+      {{ flow_db_name | replace('_', '\\_') }}
+    flow_db_grantees: >-
+      '''{{ flow_db_user }}''@''localhost''', '''{{ flow_db_user }}''@''127.0.0.1'''
+    # Huella del estado de la base y de los usuarios: la salida del playbook dice "changed" solo si cambió de verdad.
+    flow_db_fingerprint: >-
+      SELECT MD5(CONCAT_WS('|',
+        (SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{{ flow_db_name }}'),
+        (SELECT IFNULL(GROUP_CONCAT(CONCAT(Host, '=', Password) ORDER BY Host), '-') FROM mysql.user
+           WHERE User = '{{ flow_db_user }}' AND Host IN ('localhost', '127.0.0.1')),
+        (SELECT IFNULL(GROUP_CONCAT(CONCAT(GRANTEE, '/', TABLE_SCHEMA, '/', PRIVILEGE_TYPE, '/', IS_GRANTABLE)
+           ORDER BY GRANTEE, TABLE_SCHEMA, PRIVILEGE_TYPE), '-') FROM information_schema.SCHEMA_PRIVILEGES
+           WHERE GRANTEE IN ({{ flow_db_grantees }})),
+        (SELECT IFNULL(GROUP_CONCAT(CONCAT(GRANTEE, '/', PRIVILEGE_TYPE) ORDER BY GRANTEE, PRIVILEGE_TYPE), '-')
+           FROM information_schema.USER_PRIVILEGES WHERE GRANTEE IN ({{ flow_db_grantees }}))));
+    # Llaves públicas de personas (sin restrict) y la del pipeline (con restrict, tarea 9.5). Ambas opcionales.
+    # Pásese una ruta (-e flow_admin_public_key_file=~/.ssh/id_ed25519.pub) o, en un archivo de variables, una lista.
+    flow_admin_public_keys: []
+    flow_admin_public_key_file: ""
+    flow_ci_public_key: ""
+    flow_ci_public_key_file: ""
+    flow_admin_keys_all: >-
+      {{ flow_admin_public_keys + ([lookup('file', flow_admin_public_key_file | expanduser) | trim]
+         if flow_admin_public_key_file | length > 0 else []) }}
+    flow_ci_key_all: >-
+      {{ (lookup('file', flow_ci_public_key_file | expanduser) | trim) if flow_ci_public_key_file | length > 0
+         else flow_ci_public_key }}
+    # Solo para servidores de prueba: sin real_ip el limitador de inicios de sesión vería la IP de Cloudflare.
+    flow_allow_missing_real_ip: false
+    flow_vhost_path: /etc/nginx/sites-available/flow-balance.conf
+    flow_vhost_link: /etc/nginx/sites-enabled/flow-balance.conf
+    flow_snippet_path: /etc/nginx/snippets/flow-balance-security.conf
+    flow_pool_path: "/etc/php/{{ flow_php_version }}/fpm/pool.d/flowbalance.conf"
+    flow_env_path: "{{ flow_app_dir }}/shared/.env"
+
+  tasks:
+    # ------------------------------------------------------------------ Preflight (solo lee; aborta antes de modificar)
+    - name: Preflight | el nombre de host es obligatorio y válido
+      ansible.builtin.assert:
+        that:
+          - flow_host is defined
+          - flow_host is match('^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$')
+        fail_msg: "Defina el subdominio en minúsculas con -e flow_host=<subdominio> (sin esquema ni barra)."
+      tags: [preflight]
+
+    - name: Preflight | llaves públicas con forma de llave (sin opciones inyectadas)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (flow_admin_keys_all + ([flow_ci_key_all] if flow_ci_key_all | length > 0 else []))
+            | reject('match', '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/=]+( [^\r\n]*)?$')
+            | list | length == 0
+        fail_msg: "Cada llave debe ser una línea 'ssh-ed25519 AAAA... comentario', sin opciones delante."
+      tags: [preflight]
+
+    - name: Preflight | Nginx y PHP-FPM instalados
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: flow_bins
+      loop:
+        - /usr/sbin/nginx
+        - "/usr/sbin/php-fpm{{ flow_php_version }}"
+      tags: [preflight]
+
+    - name: Preflight | faltan Nginx o PHP-FPM
+      ansible.builtin.fail:
+        msg: "No existe {{ item.item }}. Este playbook no instala paquetes: el servidor debe tener Nginx y PHP {{ flow_php_version }}-FPM."
+      when: not item.stat.exists
+      loop: "{{ flow_bins.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags: [preflight]
+
+    - name: Preflight | certificado de origen de Cloudflare
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: flow_certs
+      loop:
+        - /etc/nginx/ssl/cloudflare-origin.pem
+        - /etc/nginx/ssl/cloudflare-origin.key
+      tags: [preflight]
+
+    - name: Preflight | falta el certificado o su llave
+      ansible.builtin.fail:
+        msg: >-
+          No existe {{ item.item }}. El vhost usa ese par (el comodín *.monoforms.com del blog); si está en otra ruta,
+          corrija ssl_certificate / ssl_certificate_key en deploy/nginx/flow-balance.conf.template antes de continuar.
+      when: not item.stat.exists
+      loop: "{{ flow_certs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags: [preflight]
+
+    - name: Preflight | configuración efectiva de Nginx
+      ansible.builtin.command: nginx -T
+      register: flow_nginx_full
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      tags: [preflight]
+
+    - name: Preflight | Nginx incluye sites-enabled y el real_ip del blog
+      ansible.builtin.assert:
+        that:
+          - flow_nginx_full.rc == 0
+          - "'sites-enabled' in flow_nginx_full.stdout"
+          - flow_allow_missing_real_ip | bool or 'real_ip_header CF-Connecting-IP' in flow_nginx_full.stdout
+        fail_msg: >-
+          La configuración actual de Nginx no pasa 'nginx -t', no incluye sites-enabled, o no define
+          'real_ip_header CF-Connecting-IP' (lo hereda el vhost de Flow; sin él el limitador de inicios de sesión
+          vería la IP de Cloudflare). No se modificó nada.
+      tags: [preflight]
+
+    - name: Preflight | acceso administrativo a MariaDB (socket o /root/.my.cnf)
+      ansible.builtin.command: mariadb --batch --skip-column-names -e "SELECT 1"
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      register: flow_mariadb_admin
+      tags: [preflight]
+
+    - name: Preflight | sin acceso administrativo a MariaDB
+      ansible.builtin.fail:
+        msg: >-
+          'mariadb' no entra como administrador (ni por socket ni con /root/.my.cnf). Compruebe que MariaDB esté activo
+          y cómo se autentica root; no se modificó nada.
+      when: flow_mariadb_admin.rc != 0
+      tags: [preflight]
+
+    # ------------------------------------------------------------------ Usuario y directorios (D14)
+    - name: Usuario | grupo de {{ flow_user }}
+      ansible.builtin.group:
+        name: "{{ flow_user }}"
+        system: true
+
+    - name: Usuario | {{ flow_user }} con shell, sin sudo, sin contraseña y sin grupos adicionales (ni el del blog)
+      ansible.builtin.user:
+        name: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        groups: ""
+        append: false
+        system: true
+        shell: /bin/bash
+        home: "/home/{{ flow_user }}"
+        create_home: true
+        # '*' no es una contraseña válida pero tampoco bloquea la cuenta: sshd permite la entrada con llave.
+        password: "*"
+        update_password: on_create
+
+    - name: Usuario | directorio .ssh
+      ansible.builtin.file:
+        path: "/home/{{ flow_user }}/.ssh"
+        state: directory
+        owner: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        mode: "0700"
+
+    - name: Usuario | authorized_keys (solo si se pasaron llaves)
+      ansible.builtin.copy:
+        dest: "/home/{{ flow_user }}/.ssh/authorized_keys"
+        owner: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        mode: "0600"
+        content: |
+          {% for key in flow_admin_keys_all %}
+          {{ key }}
+          {% endfor %}
+          {% if flow_ci_key_all | length > 0 %}
+          restrict {{ flow_ci_key_all }}
+          {% endif %}
+      when: (flow_admin_keys_all | length > 0) or (flow_ci_key_all | length > 0)
+
+    - name: Directorios | aplicación, releases, shared y respaldos previos a migraciones
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ flow_app_dir }}", mode: "0755" }
+        - { path: "{{ flow_app_dir }}/releases", mode: "0755" }
+        - { path: "{{ flow_app_dir }}/shared", mode: "0750" }
+        - { path: "{{ flow_app_dir }}/shared/backups", mode: "0700" }
+      loop_control:
+        label: "{{ item.path }}"
+
+    # ------------------------------------------------------------------ Secretos (D15, D28)
+    - name: Secretos | ¿existe shared/.env?
+      ansible.builtin.stat:
+        path: "{{ flow_env_path }}"
+      register: flow_env_stat
+
+    - name: Secretos | leer el .env existente
+      ansible.builtin.slurp:
+        src: "{{ flow_env_path }}"
+      register: flow_env_slurp
+      when: flow_env_stat.stat.exists
+      no_log: true
+
+    - name: Secretos | valores del .env existente
+      ansible.builtin.set_fact:
+        flow_db_password: "{{ (flow_env_slurp.content | b64decode) | regex_findall('(?m)^DB_PASSWORD=(.*)$') | first | default('', true) | trim }}"
+        flow_env_origin: "{{ (flow_env_slurp.content | b64decode) | regex_findall('(?m)^APP_ORIGIN=(.*)$') | first | default('', true) | trim }}"
+      when: flow_env_stat.stat.exists
+      no_log: true
+
+    - name: Secretos | el .env existente debe tener DB_PASSWORD
+      ansible.builtin.fail:
+        msg: >-
+          {{ flow_env_path }} existe pero DB_PASSWORD está vacío. Complételo, o bórrelo para que se genere de nuevo
+          (solo si aún no hay datos que dependan de APP_SECRET).
+      when: flow_env_stat.stat.exists and (flow_db_password | length == 0)
+
+    - name: Secretos | aviso si APP_ORIGIN del .env no coincide con flow_host
+      ansible.builtin.debug:
+        msg: "AVISO: APP_ORIGIN en shared/.env no es https://{{ flow_host }}. El playbook no lo modifica; corríjalo a mano si cambió el subdominio."
+      when: flow_env_stat.stat.exists and flow_env_origin != ('https://' ~ flow_host)
+
+    - name: Secretos | generar APP_SECRET y DB_PASSWORD en el servidor (el .env no existe)
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf '%s %s' "$(openssl rand -hex 32)" "$(openssl rand -hex 24)"
+      args:
+        executable: /bin/bash
+      register: flow_generated
+      changed_when: false
+      check_mode: false
+      when: not flow_env_stat.stat.exists
+      no_log: true
+
+    - name: Secretos | valores generados
+      ansible.builtin.set_fact:
+        flow_app_secret: "{{ flow_generated.stdout.split(' ')[0] }}"
+        flow_db_password: "{{ flow_generated.stdout.split(' ')[1] }}"
+      when: not flow_env_stat.stat.exists
+      no_log: true
+
+    - name: Secretos | escribir shared/.env (modo 600; nunca sobrescribe uno existente)
+      ansible.builtin.copy:
+        dest: "{{ flow_env_path }}"
+        owner: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        mode: "0600"
+        force: false
+        content: >-
+          {{ lookup('file', flow_repo_root ~ '/deploy/env.production.example')
+             | regex_replace('(?m)^APP_ORIGIN=.*$', 'APP_ORIGIN=https://' ~ flow_host)
+             | regex_replace('(?m)^APP_SECRET=.*$', 'APP_SECRET=' ~ (flow_app_secret | default('')))
+             | regex_replace('(?m)^DB_DATABASE=.*$', 'DB_DATABASE=' ~ flow_db_name)
+             | regex_replace('(?m)^DB_USERNAME=.*$', 'DB_USERNAME=' ~ flow_db_user)
+             | regex_replace('(?m)^DB_PASSWORD=.*$', 'DB_PASSWORD=' ~ flow_db_password) }}
+      when: not flow_env_stat.stat.exists
+      no_log: true
+
+    - name: Secretos | dueño y modo del .env existente
+      ansible.builtin.file:
+        path: "{{ flow_env_path }}"
+        owner: "{{ flow_user }}"
+        group: "{{ flow_user }}"
+        mode: "0600"
+      when: flow_env_stat.stat.exists
+
+    # ------------------------------------------------------------------ Base y usuarios de MariaDB (solo flow_balance.*)
+    - name: MariaDB | la contraseña solo lleva caracteres seguros para SQL
+      ansible.builtin.assert:
+        that: flow_db_password is match('^[A-Za-z0-9]{16,}$')
+        fail_msg: >-
+          DB_PASSWORD de shared/.env debe tener al menos 16 caracteres alfanuméricos (la que genera este playbook lo
+          cumple). No se imprime su valor.
+      no_log: true
+
+    # Si el usuario ya tiene algo más que flow_balance.*, no se corrige en silencio: se avisa.
+    - name: MariaDB | privilegios de {{ flow_db_user }} fuera de {{ flow_db_name }}.*
+      ansible.builtin.command: mariadb --batch --skip-column-names
+      args:
+        stdin: >-
+          SELECT
+          (SELECT COUNT(*) FROM information_schema.SCHEMA_PRIVILEGES WHERE GRANTEE IN ({{ flow_db_grantees }})
+             AND TABLE_SCHEMA <> '{{ flow_db_grant_literal }}')
+          + (SELECT COUNT(*) FROM information_schema.USER_PRIVILEGES WHERE GRANTEE IN ({{ flow_db_grantees }})
+             AND PRIVILEGE_TYPE <> 'USAGE')
+          + (SELECT COUNT(*) FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE IN ({{ flow_db_grantees }}));
+      register: flow_db_extra_privs
+      changed_when: false
+      check_mode: false
+
+    - name: MariaDB | el usuario tiene privilegios ajenos
+      ansible.builtin.fail:
+        msg: >-
+          {{ flow_db_user }} tiene privilegios fuera de {{ flow_db_name }}.* (globales, de otra base o de tabla). El
+          playbook no los revoca por su cuenta: revíselos con SHOW GRANTS y retírelos si no son intencionales.
+      when: flow_db_extra_privs.stdout | trim | int > 0
+
+    # localhost y 127.0.0.1 son anfitriones distintos cuando el servidor resuelve nombres de forma estricta
+    # (skip-name-resolve en el servidor de monoforms); la aplicación entra por 127.0.0.1. El SQL va por stdin: la
+    # contraseña no aparece en la lista de procesos.
+    - name: MariaDB | base, usuarios y privilegios sobre {{ flow_db_name }}.* (idempotente)
+      ansible.builtin.command: mariadb --batch --skip-column-names
+      args:
+        stdin: |
+          {{ flow_db_fingerprint }}
+          CREATE DATABASE IF NOT EXISTS `{{ flow_db_name }}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE USER IF NOT EXISTS '{{ flow_db_user }}'@'localhost' IDENTIFIED BY '{{ flow_db_password }}';
+          CREATE USER IF NOT EXISTS '{{ flow_db_user }}'@'127.0.0.1' IDENTIFIED BY '{{ flow_db_password }}';
+          ALTER USER '{{ flow_db_user }}'@'localhost' IDENTIFIED BY '{{ flow_db_password }}';
+          ALTER USER '{{ flow_db_user }}'@'127.0.0.1' IDENTIFIED BY '{{ flow_db_password }}';
+          GRANT ALL PRIVILEGES ON `{{ flow_db_grant_name }}`.* TO '{{ flow_db_user }}'@'localhost';
+          GRANT ALL PRIVILEGES ON `{{ flow_db_grant_name }}`.* TO '{{ flow_db_user }}'@'127.0.0.1';
+          {{ flow_db_fingerprint }}
+      register: flow_db_apply
+      changed_when: flow_db_apply.stdout_lines | length == 2 and flow_db_apply.stdout_lines[0] != flow_db_apply.stdout_lines[1]
+      when: not ansible_check_mode
+      no_log: true
+
+    - name: MariaDB | en --check esta parte no se simula
+      ansible.builtin.debug:
+        msg: "--check no ejecuta SQL: la base y los usuarios de MariaDB no se previsualizan."
+      when: ansible_check_mode
+
+    # ------------------------------------------------------------------ Herramienta de volcado (D29)
+    - name: Respaldo | /usr/local/bin/flowbalance-dump
+      ansible.builtin.copy:
+        src: "{{ flow_repo_root }}/deploy/bin/flowbalance-dump"
+        dest: /usr/local/bin/flowbalance-dump
+        owner: root
+        group: root
+        mode: "0755"
+
+    # ------------------------------------------------------------------ Pool de PHP-FPM (valida; si falla, restaura)
+    - name: Pool | contenido previo (para restaurarlo si la validación falla)
+      ansible.builtin.slurp:
+        src: "{{ flow_pool_path }}"
+      register: flow_pool_prev
+      failed_when: false
+      check_mode: false
+
+    - name: Pool | instalar y validar
+      block:
+        - name: Pool | /etc/php/{{ flow_php_version }}/fpm/pool.d/flowbalance.conf
+          ansible.builtin.copy:
+            src: "{{ flow_repo_root }}/deploy/php-fpm/flowbalance.conf"
+            dest: "{{ flow_pool_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Recargar PHP-FPM
+
+        - name: Pool | php-fpm{{ flow_php_version }} -t
+          ansible.builtin.command: "php-fpm{{ flow_php_version }} -t"
+          changed_when: false
+          check_mode: false
+      rescue:
+        - name: Pool | restaurar el pool anterior
+          ansible.builtin.copy:
+            content: "{{ flow_pool_prev.content | b64decode }}"
+            dest: "{{ flow_pool_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          when: flow_pool_prev.content is defined
+
+        - name: Pool | retirar el pool nuevo (no existía)
+          ansible.builtin.file:
+            path: "{{ flow_pool_path }}"
+            state: absent
+          when: flow_pool_prev.content is not defined
+
+        - name: Pool | abortar sin recargar nada
+          ansible.builtin.fail:
+            msg: "php-fpm{{ flow_php_version }} -t rechazó el pool; se restauró el estado anterior y no se recargó nada. {{ ansible_failed_result.stderr | default('') }}"
+
+    # ------------------------------------------------------------------ Vhost de Nginx (valida; si falla, restaura)
+    - name: Nginx | contenido previo del snippet y del vhost
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: flow_nginx_prev
+      loop:
+        - "{{ flow_snippet_path }}"
+        - "{{ flow_vhost_path }}"
+      failed_when: false
+      check_mode: false
+
+    - name: Nginx | ¿ya estaba habilitado el vhost?
+      ansible.builtin.stat:
+        path: "{{ flow_vhost_link }}"
+      register: flow_link_prev
+
+    - name: Nginx | instalar y validar
+      block:
+        - name: Nginx | directorio de snippets
+          ansible.builtin.file:
+            path: /etc/nginx/snippets
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Nginx | snippet de cabeceras de seguridad
+          ansible.builtin.copy:
+            src: "{{ flow_repo_root }}/deploy/nginx/flow-balance-security.conf"
+            dest: "{{ flow_snippet_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Recargar Nginx
+
+        - name: Nginx | vhost con el host sustituido
+          ansible.builtin.copy:
+            content: "{{ lookup('file', flow_repo_root ~ '/deploy/nginx/flow-balance.conf.template') | replace('@FLOW_HOST@', flow_host) }}"
+            dest: "{{ flow_vhost_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Recargar Nginx
+
+        - name: Nginx | habilitar el vhost
+          ansible.builtin.file:
+            src: "{{ flow_vhost_path }}"
+            dest: "{{ flow_vhost_link }}"
+            state: link
+          notify: Recargar Nginx
+
+        - name: Nginx | nginx -t
+          ansible.builtin.command: nginx -t
+          changed_when: false
+          check_mode: false
+      rescue:
+        - name: Nginx | restaurar los archivos anteriores
+          ansible.builtin.copy:
+            content: "{{ item.content | b64decode }}"
+            dest: "{{ item.item }}"
+            owner: root
+            group: root
+            mode: "0644"
+          when: item.content is defined
+          loop: "{{ flow_nginx_prev.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Nginx | retirar lo que no existía antes
+          ansible.builtin.file:
+            path: "{{ item.item }}"
+            state: absent
+          when: item.content is not defined
+          loop: "{{ flow_nginx_prev.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Nginx | retirar el enlace del vhost (no estaba habilitado)
+          ansible.builtin.file:
+            path: "{{ flow_vhost_link }}"
+            state: absent
+          when: not flow_link_prev.stat.exists
+
+        - name: Nginx | abortar sin recargar nada
+          ansible.builtin.fail:
+            msg: "nginx -t rechazó la configuración; se restauró el estado anterior, el blog sigue sirviendo y no se recargó nada. {{ ansible_failed_result.stderr | default('') }}"
+
+    - name: Recargar lo validado ahora (antes de comprobar el socket)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Pool | el socket del pool existe
+      ansible.builtin.wait_for:
+        path: /run/php/flowbalance.sock
+        timeout: 15
+      when: not ansible_check_mode
+
+    - name: Resumen
+      ansible.builtin.debug:
+        msg:
+          - "Flow Balance aprovisionado para https://{{ flow_host }} (usuario {{ flow_user }}, base {{ flow_db_name }})."
+          - "Faltan, a mano: registro DNS y reglas de Cloudflare (README, sección 5) y el primer despliegue."
+          - "Respaldo: deploy/backup-local.sh. Verificación: verificar-servidor.sh."
+
+  handlers:
+    - name: Recargar PHP-FPM
+      ansible.builtin.service:
+        name: "php{{ flow_php_version }}-fpm"
+        state: reloaded
+
+    - name: Recargar Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

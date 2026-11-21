@@ -1,13 +1,14 @@
 # Flow Balance: vhost propio, independiente del de Drupal.
 #
-# Instalación (el nombre de host se escribe una sola vez):
+# Instalación: la hace deploy/ansible/flow-balance.yml, que sustituye @FLOW_HOST@ (variable flow_host). A mano:
 #   sed 's/@FLOW_HOST@/flow.monoforms.com/g' flow-balance.conf.template | sudo tee /etc/nginx/sites-available/flow-balance.conf
 #
 # Lo que NO se repite aquí porque ya lo define monoforms.conf a nivel http y este vhost lo hereda:
 #   set_real_ip_from (rangos de Cloudflare) y real_ip_header CF-Connecting-IP, de modo que $remote_addr y
 #   REMOTE_ADDR en PHP son la IP del visitante.
-# Lo que este vhost NO hace, a propósito: no usa fastcgi_cache (la zona "drupal" es del blog) y no habilita
-#   brotli ni HTTP/3, que el Nginx del paquete de Ubuntu no trae.
+# Lo que este vhost NO hace, a propósito: no usa fastcgi_cache (la zona "drupal" es del blog) ni activa HTTP/3.
+#   Brotli sí está activo en el servidor: nginx.conf del blog carga el módulo y pone "brotli on" a nivel http, así que
+#   este vhost lo hereda; aquí solo se declara gzip como respaldo para los clientes que no aceptan brotli.
 
 server {
     listen 80;

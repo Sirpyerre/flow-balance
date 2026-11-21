@@ -1,0 +1,13 @@
+---
+# Inventario de ejemplo. El host y el usuario salen del entorno: no hay ninguna IP escrita en el repositorio.
+#   export FLOW_VPS_HOST=<ip-o-dns-del-vps>
+#   export FLOW_VPS_USER=<su usuario administrador con sudo>     # root mientras no exista el usuario de la tarea 8.3
+# La verificación del host SSH queda activa (ver ansible.cfg): conéctese una vez con `ssh` para fijar su huella.
+all:
+  children:
+    flow_vps:
+      hosts:
+        flow-balance-vps:
+          ansible_host: "{{ lookup('env', 'FLOW_VPS_HOST') }}"
+          ansible_user: "{{ lookup('env', 'FLOW_VPS_USER') | default('root', true) }}"
+          ansible_python_interpreter: /usr/bin/python3

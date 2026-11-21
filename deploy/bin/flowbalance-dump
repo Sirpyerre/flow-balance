@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Volcado comprimido de la base de Flow Balance a la salida estándar (D29). Es la única definición del volcado:
+# la usan deploy/backup-local.sh (por SSH, directo a disco local) y release.sh (a shared/backups).
+# Se instala en /usr/local/bin/flowbalance-dump (root, modo 755) con deploy/ansible/flow-balance.yml.
+#
+# - Lee shared/.env sin ejecutarlo (nada de `source`) y no imprime ninguna contraseña.
+# - La contraseña viaja solo en el entorno de este proceso (MYSQL_PWD), no en la línea de comandos.
+# - pipefail: si mariadb-dump falla, el código de salida es distinto de cero aunque gzip termine bien. Quien
+#   consuma el flujo debe comprobar además que termine con "-- Dump completed" (un volcado vacío no es un respaldo).
+set -euo pipefail
+umask 077
+
+ENV_FILE="${FLOWBALANCE_ENV:-/var/www/flowbalance/shared/.env}"
+[ -r "$ENV_FILE" ] || { echo "flowbalance-dump: no se puede leer $ENV_FILE" >&2; exit 2; }
+
+# Último valor de CLAVE=valor, sin comillas envolventes ni retorno de carro.
+env_value() {
+  local line
+  line=$(grep -E "^$1=" "$ENV_FILE" | tail -n 1 || true)
+  line=${line#*=}
+  line=${line%$'\r'}
+  line=${line#\"}; line=${line%\"}
+  line=${line#\'}; line=${line%\'}
+  printf '%s' "$line"
+}
+
+host=$(env_value DB_HOST);     host=${host:-127.0.0.1}
+port=$(env_value DB_PORT);     port=${port:-3306}
+name=$(env_value DB_DATABASE)
+user=$(env_value DB_USERNAME)
+pass=$(env_value DB_PASSWORD)
+
+for required in name user pass; do
+  [ -n "${!required}" ] || { echo "flowbalance-dump: falta un valor de base de datos en $ENV_FILE" >&2; exit 2; }
+done
+
+dump=$(command -v mariadb-dump || command -v mysqldump || true)
+[ -n "$dump" ] || { echo "flowbalance-dump: no hay mariadb-dump ni mysqldump" >&2; exit 2; }
+
+# --no-defaults (debe ir primero): un ~/.my.cnf del usuario que lo ejecute (p. ej. el de root, que trae su contraseña de
+# administrador) tiene prioridad sobre MYSQL_PWD y haría que el volcado use otra cuenta.
+export MYSQL_PWD="$pass"
+"$dump" --no-defaults --single-transaction --quick --default-character-set=utf8mb4 \
+  -h "$host" -P "$port" -u "$user" "$name" | gzip -9

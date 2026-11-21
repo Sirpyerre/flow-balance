@@ -2,9 +2,16 @@ schema: spec-driven
 
 context: |
   Producto: Flow Balance, control de ingresos freelance (clientes, proyectos, cobros, saldos).
-  Stack: PHP 8.4 con Laminas Mezzio, PostgreSQL, migraciones Phinx. Frontend en `frontend/`:
-  Astro 5 (páginas y layouts) con islas de React 19, Inter Variable, PWA con service worker.
-  Se ejecuta con Herd y HTTPS local. Pruebas: PHPUnit (`tests/`), Playwright (`frontend/tests/`).
+  Stack: PHP 8.3 (el código también corre en 8.4) con Laminas Mezzio, MariaDB 10.11, migraciones Phinx.
+  Frontend en `frontend/`: Astro 5 (páginas y layouts) con islas de React 19, Inter Variable, PWA con
+  service worker. Se ejecuta con Herd y HTTPS local; la base local es el servicio `mariadb` de
+  `compose.yaml`. Pruebas: PHPUnit (`tests/`), Playwright (`frontend/tests/`, solo en local).
+  Producción: un VPS de DigitalOcean compartido con el blog Drupal de monoforms.com (Nginx, PHP-FPM y
+  MariaDB), detrás de Cloudflare. Flow Balance tiene vhost, pool, usuario (`flowdeploy`) y base propios.
+  Todo lo del servidor vive en `deploy/`: playbook de Ansible acotado (`deploy/ansible/flow-balance.yml`,
+  NO el Ansible de monoforms, que reconstruye el servidor), respaldo y restauración locales, y los scripts
+  del pipeline (`package.sh`, `push.sh`, `release.sh`) que usa `.github/workflows/deploy.yml`.
+  Lee `deploy/README.md` antes de tocar el servidor.
   Estilos: un solo `frontend/src/styles/theme.css` con tokens por tema (`data-theme` oscuro/claro);
   `dashboard.astro`, `index.astro` y `SiteHeader.astro` tienen además bloques `<style>` propios.
   Identidad visual vigente: oscuro por defecto, acento violeta #8B5CF6 a rosa #F43F5E, Inter, tarjetas
@@ -40,6 +47,8 @@ operations:
       - Ejecutar `herd npm run build` en `frontend/` y las pruebas de Playwright afectadas después de cada grupo de tareas.
       - Escribir pruebas contra una base de datos independiente de la de desarrollo.
       - Ejecutar PHP, Composer y PHPUnit con `herd php` y `herd composer` (por ejemplo `herd php vendor/bin/phpunit`); el `php` suelto usa el 8.4 global y producción corre PHP 8.3.
+      - No ejecutar el Ansible de monoforms contra el VPS ni cambiar `nginx.conf`, `sshd` o la base `drupal`; el servidor se aprovisiona solo con `deploy/ansible/flow-balance.yml`. Los secretos de la aplicación (`APP_SECRET`, `DB_PASSWORD`) viven solo en `shared/.env` del servidor, nunca en GitHub ni en el repositorio.
+      - Un cambio en `deploy/` se ensaya antes en un contenedor igual al VPS (Ubuntu 24.04, Nginx 1.24 con brotli, PHP 8.3-FPM, MariaDB 10.11 con `skip-name-resolve`, sshd sin `Include`); los comandos contra el servidor real los ejecuta el usuario.
       - Exportar `TEST_DB_*`, `MIGRATION_TEST_DB_*` y `TEST_APP_SECRET` desde `.env` antes de PHPUnit; sin ellas las pruebas de integración se saltan en silencio y un "verde" no prueba nada de SQL.
   archive:
     guidance:

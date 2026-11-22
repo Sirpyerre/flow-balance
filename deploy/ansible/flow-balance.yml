@@ -453,6 +453,9 @@
             src: "{{ flow_vhost_path }}"
             dest: "{{ flow_vhost_link }}"
             state: link
+            # En --check el vhost de arriba no llega a escribirse y el módulo exige que el origen exista; en la
+            # ejecución real el origen siempre existe, así que `force` no cambia nada fuera del ensayo.
+            force: "{{ ansible_check_mode }}"
           notify: Recargar Nginx
 
         - name: Nginx | nginx -t

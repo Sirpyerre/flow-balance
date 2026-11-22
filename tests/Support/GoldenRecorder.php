@@ -15,6 +15,7 @@ final class GoldenRecorder
 {
     private array $sections = [];
     private string $current = '';
+    /** Masked ids keyed by "kind:value"; tables count from 1 on a fresh database, so a raw value alone is ambiguous. */
     private array $ids = [];
 
     public function __construct(private string $suffix) {}
@@ -51,25 +52,25 @@ final class GoldenRecorder
         }
     }
 
-    private function normalize(mixed $value, string $key): mixed
+    private function normalize(mixed $value, string $key, array $owner = [], string $ownerKey = ''): mixed
     {
         if (is_array($value)) {
             $masked = [];
             foreach ($value as $name => $item) {
-                $masked[$name] = $this->normalize($item, is_string($name) ? $name : $key);
+                $masked[$name] = $this->normalize($item, is_string($name) ? $name : $key, $value, $key);
             }
             return $masked;
         }
         if ($key === 'nextCursor' && is_string($value)) {
             [$date, $id] = explode('~', $value, 2);
-            return $date . '~' . $this->id($id);
+            return $date . '~' . $this->id($id, 'payment');
         }
         if ($key === 'createdOn' && is_string($value)) {
             // The creation day is "today"; keep only its layout so a changed format still fails.
             return (string) preg_replace('/\d/', '9', $value);
         }
         if ((is_string($value) && ctype_digit($value) || is_int($value)) && preg_match('/^(id|[a-z]+Id)$/', $key)) {
-            return $this->id((string) $value);
+            return $this->id((string) $value, $this->kind($key, $owner, $ownerKey));
         }
         return is_string($value) ? $this->text($value) : $value;
     }
@@ -85,16 +86,41 @@ final class GoldenRecorder
         return $value === $month ? '<current-month>' : $value;
     }
 
-    private function id(string $value): string
+    private function id(string $value, string $kind): string
     {
-        return $this->ids[$value] ??= '<id:' . (count($this->ids) + 1) . '>';
+        return $this->ids["{$kind}:{$value}"] ??= '<id:' . (count($this->ids) + 1) . '>';
+    }
+
+    /** Which table an id belongs to: from its key, or for a bare "id" from the owning object. */
+    private function kind(string $key, array $owner, string $ownerKey): string
+    {
+        if ($key === 'movementId') {
+            return ($owner['kind'] ?? 'payment') === 'payment' ? 'payment' : 'charge';
+        }
+        if ($key !== 'id') {
+            return substr($key, 0, -2);
+        }
+        return match (true) {
+            in_array($ownerKey, ['client', 'project', 'payment'], true) => $ownerKey,
+            isset($owner['chargeType']) => 'charge',
+            isset($owner['email']) => 'user',
+            isset($owner['agreedAmount']) => 'project',
+            isset($owner['clientPaidAmount']) => 'payment',
+            default => 'client',
+        };
     }
 
     private function csv(string $content): array
     {
         $rows = [];
         foreach (explode("\n", rtrim($content, "\n")) as $line) {
-            $rows[] = array_map(fn (?string $cell): string => $this->ids[$cell ?? ''] ?? $this->text($cell ?? ''), str_getcsv($line, escape: ''));
+            $cells = str_getcsv($line, escape: '');
+            $isPayment = str_starts_with($cells[2] ?? '', 'Abono');
+            $rows[] = array_map(fn (?string $cell, int $column): string => match (true) {
+                $column === 3 && isset($this->ids["payment:{$cell}"]) => $this->ids["payment:{$cell}"],
+                $column === 4 && isset($this->ids[($isPayment ? 'payment' : 'charge') . ":{$cell}"]) => $this->ids[($isPayment ? 'payment' : 'charge') . ":{$cell}"],
+                default => $this->text($cell ?? ''),
+            }, $cells, array_keys($cells));
         }
         return $rows;
     }

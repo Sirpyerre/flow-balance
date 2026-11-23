@@ -39,7 +39,9 @@ printf '==> Verificando la huella del servidor\n'
 
 printf '==> Subiendo el paquete a releases/%s\n' "$RELEASE"
 printf -v ssh_cmd '%q ' "${SSH[@]}"
-rsync -a -e "$ssh_cmd" "$PKG"/ "$TARGET:$APP_DIR/releases/$RELEASE/"
+# --chmod: el servidor no depende de los permisos con que llegue el paquete. Nginx (www-data) necesita atravesar el
+# release y leer frontend/dist; PHP-FPM corre como flowdeploy. Directorios 755 y archivos 644, como deja package.sh.
+rsync -a --chmod=D755,F644 -e "$ssh_cmd" "$PKG"/ "$TARGET:$APP_DIR/releases/$RELEASE/"
 
 printf '==> Activando el release en el servidor\n'
 "${SSH[@]}" "$TARGET" "bash -s -- '$RELEASE' '$APP_HOST'" < "$HERE/release.sh"

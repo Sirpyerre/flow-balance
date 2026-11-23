@@ -103,13 +103,15 @@ jobs:
           for name in DEPLOY_HOST DEPLOY_USER DEPLOY_KNOWN_HOSTS APP_ORIGIN DEPLOY_SSH_KEY; do
             [ -n "${!name}" ] || { echo "::error::falta ${name} en el entorno production"; exit 1; }
           done
+          # El paquete se extrae ANTES del umask restrictivo y con -p: sus permisos (755/644) son los que Nginx necesita
+          # para leer frontend/dist y atravesar el release; con umask 077 llegaban como 700/600 y Nginx no podía entrar.
+          mkdir package && tar -xzpf flow-balance.tar.gz -C package
           umask 077
           key_file="$RUNNER_TEMP/deploy_key"
           trap 'shred -u "$key_file" 2>/dev/null || rm -f "$key_file"' EXIT
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
           export DEPLOY_SSH_KEY_FILE="$key_file"
 
-          mkdir package && tar -xzf flow-balance.tar.gz -C package
           release="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
           app_host="${APP_ORIGIN#https://}"
           deploy/push.sh package "$release" "$app_host"

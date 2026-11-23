@@ -311,8 +311,11 @@ Cada despliegue deja el release activo y los 3 más recientes, y los 7 respaldos
 1. *Environments > New environment > `production`*: *Required reviewers* (usted) y *Deployment branches: Selected
    branches > `main`*. Los secretos y variables siguientes se crean **en ese entorno**, no en el repositorio.
 2. **Secreto** `DEPLOY_SSH_KEY`: la llave privada de despliegue (siguiente punto).
-3. **Variables** (no sensibles): `DEPLOY_HOST` (IP o DNS del VPS), `DEPLOY_USER` (`flowdeploy`), `APP_ORIGIN`
-   (`https://<subdominio>`, se compila dentro del sitio) y `DEPLOY_KNOWN_HOSTS` (la huella fijada del servidor).
+3. **Variables del entorno** (no sensibles): `DEPLOY_HOST` (IP o DNS del VPS), `DEPLOY_USER` (`flowdeploy`) y
+   `DEPLOY_KNOWN_HOSTS` (la huella fijada del servidor). **`APP_ORIGIN`** (`https://<subdominio>`, se compila dentro del
+   sitio) va además como **variable del repositorio** (Settings > Secrets and variables > Actions > Variables): el job
+   `build` no usa el entorno `production`, a propósito, para no recibir la llave de despliegue, y solo lee variables del
+   repositorio.
 4. Los secretos de la aplicación (`APP_SECRET`, `DB_PASSWORD`) **no** se cargan en GitHub: viven solo en
    `shared/.env`.
 

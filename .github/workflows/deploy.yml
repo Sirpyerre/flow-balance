@@ -53,7 +53,7 @@ jobs:
         env:
           APP_ORIGIN: ${{ vars.APP_ORIGIN }}
         run: |
-          test -n "$APP_ORIGIN" || { echo "::error::falta la variable APP_ORIGIN del entorno production"; exit 1; }
+          test -n "$APP_ORIGIN" || { echo "::error::falta la variable APP_ORIGIN del repositorio (Settings > Secrets and variables > Actions > Variables); el job build no usa el entorno production"; exit 1; }
           npm ci
           npm run build
 
